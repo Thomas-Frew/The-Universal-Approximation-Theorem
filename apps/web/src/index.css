@@ -45,5 +45,14 @@
 @layer base {
   body {
     @apply bg-paper text-ink antialiased;
+
+    /* Photo underneath, with a 95% Paper wash on top so it only just shows. */
+    --paper-wash: color-mix(in srgb, var(--color-paper) 95%, transparent);
+    background-image:
+      linear-gradient(var(--paper-wash), var(--paper-wash)),
+      url("./assets/background.jpg");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
   }
 }
