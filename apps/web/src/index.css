@@ -1,0 +1,49 @@
+@import "@fontsource-variable/fraunces/full.css";
+@import "@fontsource-variable/fraunces/full-italic.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "tailwindcss";
+
+@theme {
+  /* Drop Tailwind's default palette and font stacks so only ours exist. */
+  --color-*: initial;
+  --font-*: initial;
+
+  /* Surfaces and text */
+  --color-paper: #f7f2ea;
+  --color-vellum: #efe6d8;
+  --color-linen: #e2d8c7;
+  --color-stone: #c9beac;
+  --color-taupe: #766a5b;
+  --color-ink: #2a211b;
+
+  /* Accents */
+  --color-walnut: #7a4e2d;
+  --color-sage: #8e9a68;
+  --color-brass: #b4924f;
+  --color-oxblood: #8a3a2e;
+
+  /* Display and UI */
+  --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
+  --font-display--font-variation-settings: "WONK" 0;
+
+  /* Inputs, outputs, code, numbers */
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --font-mono--font-feature-settings: "tnum";
+
+  /* Uppercase labels and buttons */
+  --tracking-label: 0.18em;
+
+  /* What plain, unclassed text gets. */
+  --default-font-family: var(--font-display);
+  --default-font-variation-settings: "WONK" 0;
+  --default-mono-font-family: var(--font-mono);
+  --default-mono-font-feature-settings: "tnum";
+}
+
+@layer base {
+  body {
+    @apply bg-paper text-ink antialiased;
+  }
+}
