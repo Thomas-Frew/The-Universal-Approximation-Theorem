@@ -17,16 +17,22 @@ export function AboutScreen({ ref, onBack }: AboutScreenProps) {
       </div>
 
       <div className="max-w-[80vw]">
-        <h2 className="text-center text-[clamp(1.75rem,3.1vw,4rem)] text-brass italic">
+        <h2 className="text-center text-[clamp(1.5rem,2.1vw,2.75rem)] text-brass italic">
           What is the universal approximation theorem?
         </h2>
-        {/* Placeholder blurb: replace with the real introduction. */}
-        <p className="mt-10 text-[clamp(1.125rem,2.2vw,2.75rem)] leading-snug">
-          Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-          eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
-          minim veniam, quis nostrud exercitation ullamco laboris nisi ut
-          aliquip ex ea commodo consequat.
-        </p>
+
+        <div className="mx-auto mt-14 max-w-[58ch] space-y-7 text-[clamp(1.0625rem,1.3vw,1.625rem)] leading-relaxed text-pretty">
+          <p>
+            The universal approximation theorem states that a neural network
+            with a single hidden layer can approximate any continuous function
+            on a bounded domain to arbitrary accuracy, given enough neurons.
+          </p>
+          <p>
+            Your brain has a lot of neurons, and it is remarkably good at
+            learning patterns from examples alone. Let's see just how good it
+            is…
+          </p>
+        </div>
       </div>
     </section>
   );
