@@ -53,6 +53,11 @@
     }
   }
 
+  /* Moving between full screens. Same length as SCREEN_TRANSITION_MS and same
+     curve as easeInOutCubic in src/lib/motion.ts. */
+  --screen-transition: 1100ms;
+  --ease-screen: cubic-bezier(0.65, 0, 0.35, 1);
+
   /* What plain, unclassed text gets. */
   --default-font-family: var(--font-display);
   --default-font-variation-settings: "WONK" 0;
@@ -63,7 +68,7 @@
 @layer base {
   /* Full-height screens snap into place; pages without snap points scroll normally. */
   html {
-    @apply snap-y snap-mandatory motion-safe:scroll-smooth;
+    @apply snap-y snap-mandatory;
   }
 
   body {
@@ -78,4 +83,94 @@
     background-position: center;
     background-attachment: fixed;
   }
+}
+
+/* Screen changes (App.tsx). Each screen's <main> has its own
+   view-transition-name, so the fixed background stays put while the screens
+   move over it. Intro to level continues the upward scroll of the intro. */
+@keyframes screen-leave-up {
+  to {
+    transform: translateY(-100vh);
+  }
+}
+
+@keyframes screen-enter-up {
+  from {
+    transform: translateY(100vh);
+  }
+}
+
+::view-transition-old(intro) {
+  animation: screen-leave-up var(--screen-transition) var(--ease-screen) both;
+}
+
+::view-transition-new(level) {
+  animation: screen-enter-up var(--screen-transition) var(--ease-screen) both;
+}
+
+/* Back to the intro is a plain cross-fade, a little slower than the default. */
+::view-transition-old(level),
+::view-transition-new(intro) {
+  animation-duration: 500ms;
+}
+
+/* CodeMirror (CodeEditor.tsx). These sit outside any @layer on purpose:
+   CodeMirror injects unlayered styles, which would beat layered ones. */
+.cm-editor {
+  height: 100%;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-size: 0.9375rem;
+}
+
+.cm-editor.cm-focused {
+  outline: none; /* the panel border shows focus instead */
+}
+
+.cm-editor .cm-scroller {
+  font-family: var(--font-mono);
+  line-height: 1.6;
+}
+
+.cm-editor .cm-gutters {
+  background-color: var(--color-linen);
+  color: var(--color-taupe);
+  border-right: 1px solid var(--color-stone);
+}
+
+.cm-editor .cm-activeLine {
+  background-color: color-mix(in srgb, var(--color-linen) 45%, transparent);
+}
+
+.cm-editor .cm-activeLineGutter {
+  background-color: var(--color-stone);
+  color: var(--color-ink);
+}
+
+.cm-editor .cm-cursor {
+  border-left-color: var(--color-ink);
+}
+
+.cm-editor .cm-selectionBackground,
+.cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background-color: color-mix(in srgb, var(--color-sage) 40%, transparent);
+}
+
+.cm-editor .cm-matchingBracket {
+  background-color: color-mix(in srgb, var(--color-brass) 35%, transparent);
+}
+
+.cm-editor .tok-keyword {
+  color: var(--color-walnut);
+  font-weight: 600;
+}
+
+.cm-editor .tok-comment {
+  color: var(--color-taupe);
+  font-style: italic;
+}
+
+.cm-editor .tok-string,
+.cm-editor .tok-number {
+  color: color-mix(in srgb, var(--color-sage) 55%, var(--color-ink));
 }

@@ -1,63 +1,40 @@
-import { useEffect, useRef } from "react";
-import { AboutScreen } from "./screens/AboutScreen";
-import { TitleScreen } from "./screens/TitleScreen";
+import { useCallback, useLayoutEffect, useState } from "react";
+import { flushSync } from "react-dom";
+import { placeholderLevel } from "./fixtures/placeholderLevel";
+import { prefersReducedMotion } from "./lib/motion";
+import { IntroScreen } from "./screens/IntroScreen";
+import { LevelScreen } from "./screens/LevelScreen";
 
-const NEXT_KEYS = new Set(["ArrowDown", "PageDown", " "]);
-const PREVIOUS_KEYS = new Set(["ArrowUp", "PageUp"]);
-
-/** After the wheel changes screen, ignore it this long so one flick moves one screen. */
-const WHEEL_COOLDOWN_MS = 700;
+// Until there is a router and a level select, the app is one of two screens,
+// and the intro leads straight into the first level.
+type Screen = "intro" | "level";
 
 export function App() {
-  const titleRef = useRef<HTMLElement>(null);
-  const aboutRef = useRef<HTMLElement>(null);
+  const [screen, setScreen] = useState<Screen>("intro");
 
-  // Smoothness comes from `scroll-behavior` in index.css, so reduced-motion
-  // users get an instant jump without any extra logic here.
-  const showTitle = () => titleRef.current?.scrollIntoView();
-  const showAbout = () => aboutRef.current?.scrollIntoView();
+  // Each screen starts at the top, without the smooth-scroll animation.
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [screen]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
-      // Space on a focused button should press that button, not change screen.
-      if (event.key === " " && event.target instanceof HTMLButtonElement) return;
-
-      if (NEXT_KEYS.has(event.key)) {
-        event.preventDefault();
-        aboutRef.current?.scrollIntoView();
-      } else if (PREVIOUS_KEYS.has(event.key)) {
-        event.preventDefault();
-        titleRef.current?.scrollIntoView();
-      }
-    };
-
-    // A single mouse-wheel notch is too small to carry past the snap point on
-    // its own, so treat any wheel movement as "go to the screen in that direction".
-    let wheelLockedUntil = 0;
-    const onWheel = (event: WheelEvent) => {
-      if (event.ctrlKey || event.deltaY === 0) return; // ctrl+wheel is pinch-zoom
-      event.preventDefault();
-      if (event.timeStamp < wheelLockedUntil) return;
-
-      wheelLockedUntil = event.timeStamp + WHEEL_COOLDOWN_MS;
-      const target = event.deltaY > 0 ? aboutRef : titleRef;
-      target.current?.scrollIntoView();
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    // `passive: false` is required for preventDefault to work on wheel events.
-    window.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("wheel", onWheel);
-    };
+  // A view transition photographs the page, lets us change it, then animates
+  // from the old picture to the new one (see the ::view-transition rules in
+  // index.css). flushSync makes React apply the change inside that window.
+  const show = useCallback((next: Screen) => {
+    const update = () => flushSync(() => setScreen(next));
+    if ("startViewTransition" in document && !prefersReducedMotion()) {
+      document.startViewTransition(update);
+    } else {
+      update();
+    }
   }, []);
 
-  return (
-    <main>
-      <TitleScreen ref={titleRef} onNext={showAbout} />
-      <AboutScreen ref={aboutRef} onBack={showTitle} />
-    </main>
+  const startLevel = useCallback(() => show("level"), [show]);
+  const showIntro = useCallback(() => show("intro"), [show]);
+
+  return screen === "intro" ? (
+    <IntroScreen onStart={startLevel} />
+  ) : (
+    <LevelScreen level={placeholderLevel} onExit={showIntro} />
   );
 }

@@ -4,9 +4,10 @@ import { Keycap } from "../components/Keycap";
 type AboutScreenProps = {
   ref: Ref<HTMLElement>;
   onBack: () => void;
+  onStart: () => void;
 };
 
-export function AboutScreen({ ref, onBack }: AboutScreenProps) {
+export function AboutScreen({ ref, onBack, onStart }: AboutScreenProps) {
   return (
     <section
       ref={ref}
@@ -33,6 +34,10 @@ export function AboutScreen({ ref, onBack }: AboutScreenProps) {
             is…
           </p>
         </div>
+      </div>
+
+      <div className="absolute bottom-12">
+        <Keycap direction="down" label="Start" showLabel onClick={onStart} />
       </div>
     </section>
   );
