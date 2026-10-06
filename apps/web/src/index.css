@@ -28,12 +28,30 @@
   --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
   --font-display--font-variation-settings: "WONK" 0;
 
+  /* Fraunces thins its strokes at large sizes. `font-title` pins the optical
+     size low so the big title keeps the sturdy letterforms of the design. */
+  --font-title: var(--font-display);
+  --font-title--font-variation-settings: "opsz" 30, "WONK" 0;
+
   /* Inputs, outputs, code, numbers */
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   --font-mono--font-feature-settings: "tnum";
 
   /* Uppercase labels and buttons */
   --tracking-label: 0.18em;
+
+  /* Gentle nudge for the "scroll down" cue: `animate-bob` */
+  --animate-bob: bob 2.4s ease-in-out infinite;
+
+  @keyframes bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(6px);
+    }
+  }
 
   /* What plain, unclassed text gets. */
   --default-font-family: var(--font-display);
@@ -43,6 +61,11 @@
 }
 
 @layer base {
+  /* Full-height screens snap into place; pages without snap points scroll normally. */
+  html {
+    @apply snap-y snap-mandatory motion-safe:scroll-smooth;
+  }
+
   body {
     @apply bg-paper text-ink antialiased;
 
