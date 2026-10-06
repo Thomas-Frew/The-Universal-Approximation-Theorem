@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { animateScrollTo } from "../lib/motion";
+import { slideScrollTo } from "../lib/motion";
 import { AboutScreen } from "./AboutScreen";
 import { TitleScreen } from "./TitleScreen";
 
@@ -18,6 +18,7 @@ type IntroScreenProps = {
 
 /** The title page and the about page, stacked, with one-screen-at-a-time navigation. */
 export function IntroScreen({ onStart }: IntroScreenProps) {
+  const mainRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLElement>(null);
   const aboutRef = useRef<HTMLElement>(null);
 
@@ -26,9 +27,9 @@ export function IntroScreen({ onStart }: IntroScreenProps) {
   const stopSlide = useRef(() => {});
 
   const slideTo = useCallback((section: HTMLElement | null) => {
-    if (!section || sliding.current) return;
+    if (!section || !mainRef.current || sliding.current) return;
     sliding.current = true;
-    stopSlide.current = animateScrollTo(section.offsetTop, () => {
+    stopSlide.current = slideScrollTo(mainRef.current, section.offsetTop, () => {
       sliding.current = false;
     });
   }, []);
@@ -95,7 +96,7 @@ export function IntroScreen({ onStart }: IntroScreenProps) {
   }, [onStart, showAbout, showTitle]);
 
   return (
-    <main className="[view-transition-name:intro]">
+    <main ref={mainRef} className="[view-transition-name:intro]">
       <TitleScreen ref={titleRef} onNext={showAbout} />
       <AboutScreen ref={aboutRef} onBack={showTitle} onStart={onStart} />
     </main>

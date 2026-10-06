@@ -54,7 +54,7 @@
   }
 
   /* Moving between full screens. Same length as SCREEN_TRANSITION_MS and same
-     curve as easeInOutCubic in src/lib/motion.ts. */
+     curve as SCREEN_EASING in src/lib/motion.ts. */
   --screen-transition: 1100ms;
   --ease-screen: cubic-bezier(0.65, 0, 0.35, 1);
 
@@ -73,15 +73,24 @@
 
   body {
     @apply bg-paper text-ink antialiased;
+  }
 
-    /* Photo underneath, with a 95% Paper wash on top so it only just shows. */
+  /* The backdrop: photo underneath, with a 95% Paper wash on top so it only
+     just shows. It is its own fixed layer rather than a
+     `background-attachment: fixed` on body, because that forces the browser to
+     repaint the photo on every frame of a scroll; a fixed layer is painted
+     once and left alone. */
+  body::before {
     --paper-wash: color-mix(in srgb, var(--color-paper) 95%, transparent);
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
     background-image:
       linear-gradient(var(--paper-wash), var(--paper-wash)),
-      url("./assets/background.jpg");
+      url("./assets/background.webp");
     background-size: cover;
     background-position: center;
-    background-attachment: fixed;
   }
 }
 
