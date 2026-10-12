@@ -7,10 +7,12 @@
   },
   "scripts": {
     "dev": "node --env-file-if-exists=.env --watch src/index.ts",
+    "verify": "node --env-file-if-exists=.env src/verify.ts",
     "typecheck": "tsc"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.4",
+    "@hono/zod-validator": "^0.9.1",
     "@uat/shared": "workspace:*",
     "hono": "^4.13.13",
     "yaml": "^2.9.1",
