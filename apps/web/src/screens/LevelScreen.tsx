@@ -88,7 +88,11 @@ export function LevelScreen({ level, onExit }: LevelScreenProps) {
           />
         </div>
 
-        <HypothesisPanel levelNumber={level.number} onVerdict={onVerdict} />
+        <HypothesisPanel
+          levelNumber={level.number}
+          observations={[...level.samples, ...log]}
+          onVerdict={onVerdict}
+        />
       </div>
     </main>
   );

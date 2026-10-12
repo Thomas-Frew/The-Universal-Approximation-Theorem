@@ -1,11 +1,20 @@
-import { type Language, languageSchema, type SubmissionResult } from "@uat/shared";
+import {
+  type Language,
+  languageSchema,
+  type Observation,
+  type RunOutcome,
+  type SubmissionResult,
+} from "@uat/shared";
 import { useState } from "react";
-import { submitCode } from "../lib/api";
+import { runCode, submitCode } from "../lib/api";
 import { LANGUAGE_NAMES, STARTER_CODE } from "../lib/starterCode";
 import { CodeEditor } from "./CodeEditor";
+import { Label } from "./Label";
 
 type HypothesisPanelProps = {
   levelNumber: number;
+  /** Everything in the player's log, samples included. Run checks against these. */
+  observations: readonly Observation[];
   /** Called with every verdict, so the screen can update counters and the log. */
   onVerdict: (result: SubmissionResult) => void;
 };
@@ -13,8 +22,17 @@ type HypothesisPanelProps = {
 type Status = {
   tone: "neutral" | "success" | "error";
   text: string;
-  /** Compiler output, shown under the status line. */
+  /** Compiler output, shown above the status line. */
   detail?: string;
+  /** Observations a Run got wrong, shown above the status line. */
+  mismatches?: Mismatch[];
+};
+
+type Mismatch = { observation: Observation; outcome: RunOutcome };
+
+const OUTCOME_NOTES: Partial<Record<RunOutcome["verdict"], string>> = {
+  runtime_error: "runtime error",
+  time_limit: "time limit exceeded",
 };
 
 const buttonBase =
@@ -25,6 +43,27 @@ const TONE_CLASSES = {
   success: "text-sage",
   error: "text-oxblood",
 };
+
+/** Sits in the top right corner of a details box, outside its scrolling area. */
+function CloseButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Close"
+      className="absolute top-2 right-2 flex size-6 cursor-pointer items-center justify-center rounded-full border border-stone bg-paper text-taupe outline-offset-2 outline-walnut transition-colors hover:border-taupe hover:bg-linen hover:text-ink focus-visible:outline-2"
+    >
+      <svg viewBox="0 0 10 10" className="size-2.5" aria-hidden="true">
+        <path
+          d="M1 1l8 8M9 1l-8 8"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
+      </svg>
+    </button>
+  );
+}
 
 function describe(result: SubmissionResult): Status {
   switch (result.status) {
@@ -42,37 +81,74 @@ function describe(result: SubmissionResult): Status {
 }
 
 /** The right-hand panel: pick a language, write the code, run or submit it. */
-export function HypothesisPanel({ levelNumber, onVerdict }: HypothesisPanelProps) {
+export function HypothesisPanel({
+  levelNumber,
+  observations,
+  onVerdict,
+}: HypothesisPanelProps) {
   const [language, setLanguage] = useState<Language>("python");
   // One draft per language, so switching language does not lose your work.
   const [drafts, setDrafts] = useState(STARTER_CODE);
-  const [judging, setJudging] = useState(false);
+  // Which button is waiting on the judge, if any. Only one at a time.
+  const [busy, setBusy] = useState<"run" | "submit" | null>(null);
   const [status, setStatus] = useState<Status>({
     tone: "neutral",
-    text: "Not yet submitted.",
+    text: "Not yet run.",
   });
+
+  // Hides the compiler output or the table of differences, keeping the status line.
+  const closeDetails = () =>
+    setStatus(({ tone, text }) => ({ tone, text }));
 
   const setCode = (code: string) =>
     setDrafts((previous) => ({ ...previous, [language]: code }));
 
-  const submit = async () => {
-    if (judging) return;
-    setJudging(true);
-    setStatus({ tone: "neutral", text: "Judging…" });
+  // Shared by both buttons: show progress, do the work, report a failure to
+  // reach the judge. No verdict means nothing is counted against the player.
+  const withJudge = async (action: "run" | "submit", work: () => Promise<Status>) => {
+    if (busy) return;
+    setBusy(action);
+    setStatus({ tone: "neutral", text: action === "run" ? "Running…" : "Judging…" });
     try {
-      const result = await submitCode(levelNumber, language, drafts[language]);
-      setStatus(describe(result));
-      onVerdict(result);
+      setStatus(await work());
     } catch (error) {
-      // No verdict was reached, so nothing is counted against the player.
       setStatus({
         tone: "error",
         text: error instanceof Error ? error.message : "The judge did not answer.",
       });
     } finally {
-      setJudging(false);
+      setBusy(null);
     }
   };
+
+  const submit = () =>
+    withJudge("submit", async () => {
+      const result = await submitCode(levelNumber, language, drafts[language]);
+      onVerdict(result);
+      return describe(result);
+    });
+
+  // Run checks the code against what the player has already seen. It is free
+  // and says nothing about the hidden tests.
+  const run = () =>
+    withJudge("run", async () => {
+      const result = await runCode(levelNumber, language, drafts[language], observations);
+      if (result.status === "compile_error") {
+        return { tone: "error", text: "Compilation error.", detail: result.message };
+      }
+      const mismatches = observations.flatMap((observation, index) => {
+        const outcome = result.outcomes[index];
+        return outcome && outcome.verdict !== "passed" ? [{ observation, outcome }] : [];
+      });
+      const total = observations.length;
+      return mismatches.length === 0
+        ? { tone: "success", text: `Matches all ${total} observations.` }
+        : {
+            tone: "error",
+            text: `Differs on ${mismatches.length} of ${total} observations.`,
+            mismatches,
+          };
+    });
 
   return (
     <section className="flex min-h-[40rem] flex-col rounded-md border border-stone bg-vellum p-6">
@@ -108,9 +184,50 @@ export function HypothesisPanel({ levelNumber, onVerdict }: HypothesisPanelProps
       </div>
 
       {status.detail && (
-        <pre className="mt-4 max-h-48 overflow-auto rounded-md border border-stone bg-paper p-3 font-mono text-sm whitespace-pre-wrap text-oxblood">
-          {status.detail}
-        </pre>
+        <div className="relative mt-4">
+          <pre className="max-h-48 overflow-auto rounded-md border border-stone bg-paper p-3 pr-10 font-mono text-sm whitespace-pre-wrap text-oxblood">
+            {status.detail}
+          </pre>
+          <CloseButton onClick={closeDetails} />
+        </div>
+      )}
+
+      {status.mismatches && (
+        <div className="relative mt-4">
+          <CloseButton onClick={closeDetails} />
+          <div className="max-h-48 overflow-auto rounded-md border border-stone bg-paper p-3 pr-10">
+            <table className="w-full text-left">
+              <thead>
+                <tr>
+                  <th className="pb-1 font-normal">
+                    <Label>Input</Label>
+                  </th>
+                  <th className="pb-1 font-normal">
+                    <Label>Expected</Label>
+                  </th>
+                  <th className="pb-1 font-normal">
+                    <Label>Yours</Label>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="font-mono text-sm">
+                {status.mismatches.map(({ observation, outcome }) => (
+                  <tr key={observation.input} className="align-top">
+                    <td className="py-1 pr-4 whitespace-pre-wrap">
+                      {observation.input.trimEnd()}
+                    </td>
+                    <td className="py-1 pr-4 whitespace-pre-wrap text-walnut">
+                      {observation.output.trimEnd()}
+                    </td>
+                    <td className="py-1 whitespace-pre-wrap text-oxblood">
+                      {OUTCOME_NOTES[outcome.verdict] ?? outcome.actual.trimEnd()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       <div className="mt-4 flex items-center gap-4">
@@ -119,20 +236,19 @@ export function HypothesisPanel({ levelNumber, onVerdict }: HypothesisPanelProps
         </p>
         <button
           type="button"
-          onClick={() =>
-            setStatus({ tone: "neutral", text: "Run is not connected yet." })
-          }
+          onClick={() => void run()}
+          disabled={busy !== null}
           className={`${buttonBase} border-stone bg-paper hover:bg-linen`}
         >
-          Run
+          {busy === "run" ? "Running" : "Run"}
         </button>
         <button
           type="button"
           onClick={() => void submit()}
-          disabled={judging}
+          disabled={busy !== null}
           className={`${buttonBase} border-walnut bg-walnut text-paper hover:bg-ink`}
         >
-          {judging ? "Judging" : "Submit"}
+          {busy === "submit" ? "Judging" : "Submit"}
         </button>
       </div>
     </section>

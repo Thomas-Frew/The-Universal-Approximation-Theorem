@@ -2,8 +2,12 @@ import { randomBytes } from "node:crypto";
 import {
   type Language,
   type Level,
+  MAX_RUN_OUTPUT_LENGTH,
   type Observation,
   outputsMatch,
+  type RunOutcome,
+  type RunRequest,
+  type RunResult,
   type SubmissionRequest,
   type SubmissionResult,
 } from "@uat/shared";
@@ -83,17 +87,24 @@ type TestRun = { stdout: string; exitCode: number };
 /**
  * The script Judge0 runs in place of the program. Its stdin holds, for each
  * test, a line with the input's size in bytes followed by the input itself.
- * It stops at the first test that crashes or times out: the verdict is the
- * first failing test, so nothing after that can matter.
+ *
+ * When judging a submission it stops at the first test that crashes or times
+ * out: the verdict is the first failing test, so nothing after that can
+ * matter. A Run reports on every observation, so it keeps going.
  */
-function runScript(runCommand: string, timeLimitSeconds: number, marker: string): string {
+function runScript(
+  runCommand: string,
+  timeLimitSeconds: number,
+  marker: string,
+  stopAtFirstFailure: boolean,
+): string {
   return `#!/bin/bash
 while read -r size; do
   head -c "$size" > input.txt
   timeout ${timeLimitSeconds} ${runCommand} < input.txt 2>/dev/null
   code=$?
   printf '\\n%s %s\\n' '${marker}' "$code"
-  [ "$code" -eq 0 ] || break
+  ${stopAtFirstFailure ? '[ "$code" -eq 0 ] || break' : ""}
 done
 `;
 }
@@ -120,30 +131,33 @@ function parseRuns(stdout: string, marker: string): TestRun[] {
   }
 }
 
+type TestVerdict = RunOutcome["verdict"];
+
 /**
- * The verdict is decided by the first failing test, in the tests' fixed order.
- * `ranOutOfTime` says Judge0 stopped the whole script for taking too long,
- * which explains a test that never reported back.
+ * How the program did on one test. `ranOutOfTime` says Judge0 stopped the
+ * whole script for taking too long, which explains a test that never reported back.
  */
+function judgeTest(
+  run: TestRun | undefined,
+  expected: string,
+  ranOutOfTime: boolean,
+): TestVerdict {
+  if (!run) return ranOutOfTime ? "time_limit" : "runtime_error";
+  if (TIMEOUT_EXIT_CODES.includes(run.exitCode)) return "time_limit";
+  if (run.exitCode !== 0) return "runtime_error";
+  return outputsMatch(run.stdout, expected) ? "passed" : "wrong_answer";
+}
+
+/** The verdict is decided by the first failing test, in the tests' fixed order. */
 export function decideVerdict(
   tests: readonly Observation[],
   runs: readonly TestRun[],
   ranOutOfTime: boolean,
 ): SubmissionResult {
   for (const [index, test] of tests.entries()) {
-    const revealed = { input: test.input, output: test.output };
-    const run = runs[index];
-    if (!run) {
-      return { status: ranOutOfTime ? "time_limit" : "runtime_error", revealed };
-    }
-    if (TIMEOUT_EXIT_CODES.includes(run.exitCode)) {
-      return { status: "time_limit", revealed };
-    }
-    if (run.exitCode !== 0) {
-      return { status: "runtime_error", revealed };
-    }
-    if (!outputsMatch(run.stdout, test.output)) {
-      return { status: "wrong_answer", revealed };
+    const verdict = judgeTest(runs[index], test.output, ranOutOfTime);
+    if (verdict !== "passed") {
+      return { status: verdict, revealed: { input: test.input, output: test.output } };
     }
   }
   return { status: "accepted" };
@@ -169,8 +183,26 @@ const STATUS_INTERNAL_ERROR = 13;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export function createSubmitter(levels: readonly LoadedLevel[], judge0Url: string) {
+/** What came back from running a program on some inputs. */
+type Execution =
+  | { compiled: false; message: string }
+  | { compiled: true; runs: TestRun[]; ranOutOfTime: boolean };
+
+/** The two things the judge can do with a player's program. */
+export type Judge = {
+  /** Judge it against the level's hidden tests. Costs the player if it fails. */
+  submit: (level: Level, submission: SubmissionRequest) => Promise<SubmissionResult>;
+  /** Try it against observations the player already has. Free. */
+  run: (level: Level, request: RunRequest) => Promise<RunResult>;
+};
+
+export function createJudge(levels: readonly LoadedLevel[], judge0Url: string): Judge {
   const byId = new Map(levels.map((loaded) => [loaded.level.id, loaded]));
+  const find = (level: Level) => {
+    const loaded = byId.get(level.id);
+    if (!loaded) throw new Error(`Level ${level.id} is not loaded`);
+    return loaded;
+  };
 
   // Everything is sent and read base64-encoded: Judge0 refuses to return
   // output as plain text if it is not valid ASCII, which compiler errors are not.
@@ -186,12 +218,14 @@ export function createSubmitter(levels: readonly LoadedLevel[], judge0Url: strin
     return response.json() as Promise<unknown>;
   };
 
-  return async (level: Level, { language, code }: SubmissionRequest): Promise<SubmissionResult> => {
-    const loaded = byId.get(level.id);
-    if (!loaded) throw new Error(`Level ${level.id} is not loaded`);
-
+  /** Compiles the program once in Judge0 and runs it on each input in turn. */
+  const execute = async (
+    loaded: LoadedLevel,
+    { language, code }: SubmissionRequest,
+    inputs: readonly string[],
+    stopAtFirstFailure: boolean,
+  ): Promise<Execution> => {
     const toolchain = TOOLCHAINS[language];
-    const tests = loaded.secrets;
     const timeLimitSeconds = loaded.timeLimitMs / 1000;
     // Made up per submission so a program's own output is not mistaken for it.
     const marker = `@@${randomBytes(16).toString("hex")}`;
@@ -199,16 +233,16 @@ export function createSubmitter(levels: readonly LoadedLevel[], judge0Url: strin
     const archive = zipSync({
       [toolchain.file]: strToU8(code),
       compile: strToU8(`#!/bin/bash\n${toolchain.compile}\n`),
-      run: strToU8(runScript(toolchain.run, timeLimitSeconds, marker)),
+      run: strToU8(runScript(toolchain.run, timeLimitSeconds, marker, stopAtFirstFailure)),
     });
 
     const { token } = judge0TokenSchema.parse(
       await judge0("/submissions?base64_encoded=true", {
         language_id: MULTI_FILE_LANGUAGE_ID,
         additional_files: toBase64(archive),
-        stdin: toBase64(packInputs(tests.map((test) => test.input))),
-        cpu_time_limit: Math.min(MAX_CPU_SECONDS, tests.length * timeLimitSeconds + 2),
-        wall_time_limit: Math.min(MAX_WALL_SECONDS, tests.length * timeLimitSeconds + 5),
+        stdin: toBase64(packInputs(inputs)),
+        cpu_time_limit: Math.min(MAX_CPU_SECONDS, inputs.length * timeLimitSeconds + 2),
+        wall_time_limit: Math.min(MAX_WALL_SECONDS, inputs.length * timeLimitSeconds + 5),
         memory_limit: Math.min(MAX_MEMORY_KB, loaded.memoryLimitKb),
       }),
     );
@@ -228,7 +262,7 @@ export function createSubmitter(levels: readonly LoadedLevel[], judge0Url: strin
       }
       if (result.status.id === STATUS_COMPILE_ERROR) {
         return {
-          status: "compile_error",
+          compiled: false,
           message: fromBase64(result.compile_output).trim().slice(0, MAX_COMPILE_MESSAGE_LENGTH),
         };
       }
@@ -237,11 +271,47 @@ export function createSubmitter(levels: readonly LoadedLevel[], judge0Url: strin
           `Judge0 failed: ${result.status.description}. ${fromBase64(result.message)}`,
         );
       }
-      return decideVerdict(
-        tests,
-        parseRuns(fromBase64(result.stdout), marker),
-        result.status.id === STATUS_TIME_LIMIT,
-      );
+      return {
+        compiled: true,
+        runs: parseRuns(fromBase64(result.stdout), marker),
+        ranOutOfTime: result.status.id === STATUS_TIME_LIMIT,
+      };
     }
+  };
+
+  return {
+    async submit(level, submission) {
+      const loaded = find(level);
+      const tests = loaded.secrets;
+      const execution = await execute(loaded, submission, tests.map((test) => test.input), true);
+      if (!execution.compiled) {
+        return { status: "compile_error", message: execution.message };
+      }
+      return decideVerdict(tests, execution.runs, execution.ranOutOfTime);
+    },
+
+    // Only the player's own observations go into the sandbox here, never a
+    // hidden test, which is why this may send the program's output back.
+    async run(level, { observations, ...submission }) {
+      const execution = await execute(
+        find(level),
+        submission,
+        observations.map((observation) => observation.input),
+        false,
+      );
+      if (!execution.compiled) {
+        return { status: "compile_error", message: execution.message };
+      }
+      return {
+        status: "ran",
+        outcomes: observations.map((observation, index) => {
+          const run = execution.runs[index];
+          return {
+            verdict: judgeTest(run, observation.output, execution.ranOutOfTime),
+            actual: (run?.stdout ?? "").slice(0, MAX_RUN_OUTPUT_LENGTH),
+          };
+        }),
+      };
+    },
   };
 }

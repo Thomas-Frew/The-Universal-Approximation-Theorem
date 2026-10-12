@@ -5,6 +5,9 @@ import {
   type Language,
   type QueryResult,
   queryResultSchema,
+  type Observation,
+  type RunResult,
+  runResultSchema,
   type SubmissionResult,
   submissionResultSchema,
 } from "@uat/shared";
@@ -37,6 +40,16 @@ export async function sendQuery(levelNumber: number, input: string): Promise<Que
   return queryResultSchema.parse(await response.json());
 }
 
+/** The API explains its own failures as { error }; anything else is a surprise. */
+async function failure(response: Response): Promise<Error> {
+  const body: unknown = await response.json().catch(() => null);
+  const message =
+    body && typeof body === "object" && "error" in body && typeof body.error === "string"
+      ? body.error
+      : `The server answered ${response.status}.`;
+  return new Error(message);
+}
+
 /** Sends a program to be judged against the level's hidden tests. */
 export async function submitCode(
   levelNumber: number,
@@ -47,14 +60,26 @@ export async function submitCode(
     param: { number: String(levelNumber) },
     json: { language, code },
   });
-  if (!response.ok) {
-    // The API explains its own failures as { error }; anything else is a surprise.
-    const body: unknown = await response.json().catch(() => null);
-    const message =
-      body && typeof body === "object" && "error" in body && typeof body.error === "string"
-        ? body.error
-        : `The server answered ${response.status}.`;
-    throw new Error(message);
-  }
+  if (!response.ok) throw await failure(response);
   return submissionResultSchema.parse(await response.json());
+}
+
+/** Tries a program against observations the player already has. Free. */
+export async function runCode(
+  levelNumber: number,
+  language: Language,
+  code: string,
+  observations: readonly Observation[],
+): Promise<RunResult> {
+  const response = await client.api.levels[":number"].runs.$post({
+    param: { number: String(levelNumber) },
+    json: {
+      language,
+      code,
+      // Only the two fields the API asks for, whatever else the log keeps.
+      observations: observations.map(({ input, output }) => ({ input, output })),
+    },
+  });
+  if (!response.ok) throw await failure(response);
+  return runResultSchema.parse(await response.json());
 }

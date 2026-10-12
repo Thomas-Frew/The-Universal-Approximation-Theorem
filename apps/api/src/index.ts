@@ -2,7 +2,7 @@ import { serve } from "@hono/node-server";
 import { createApp } from "./app.ts";
 import { readConfig } from "./config.ts";
 import { loadLevels } from "./levels.ts";
-import { createSubmitter } from "./judge.ts";
+import { createJudge } from "./judge.ts";
 import { createQueryRunner } from "./query.ts";
 
 const { levelsDir, cacheDir, debug, judge0Url } = readConfig();
@@ -15,7 +15,7 @@ const port = Number(process.env.PORT ?? 8787);
 const app = createApp({
   levels: loaded.map(({ level }) => level),
   runQuery: createQueryRunner(loaded, { debug }),
-  submit: judge0Url ? createSubmitter(loaded, judge0Url) : null,
+  judge: judge0Url ? createJudge(loaded, judge0Url) : null,
 });
 
 serve({ fetch: app.fetch, port }, () => {

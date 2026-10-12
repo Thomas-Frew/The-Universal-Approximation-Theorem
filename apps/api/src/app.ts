@@ -3,6 +3,9 @@ import {
   type Level,
   type QueryResult,
   queryRequestSchema,
+  type RunRequest,
+  type RunResult,
+  runRequestSchema,
   type SubmissionRequest,
   type SubmissionResult,
   submissionRequestSchema,
@@ -14,15 +17,21 @@ export type AppDependencies = {
   levels: readonly Level[];
   /** Asks a level's machine for its answer to an input. */
   runQuery: (level: Level, input: string) => Promise<QueryResult>;
-  /** Judges a player's program against a level's hidden tests. `null` if there is no judge. */
-  submit: ((level: Level, submission: SubmissionRequest) => Promise<SubmissionResult>) | null;
+  /** Runs player programs in the sandbox. `null` if there is no judge. */
+  judge: {
+    submit: (level: Level, submission: SubmissionRequest) => Promise<SubmissionResult>;
+    run: (level: Level, request: RunRequest) => Promise<RunResult>;
+  } | null;
 };
+
+const JUDGE_OFF = "The judge is not connected.";
+const JUDGE_UNREACHABLE = "The judge could not be reached.";
 
 /**
  * The HTTP routes. Everything that needs Node (files, child processes) is
  * passed in, so the web app can import `AppType` without pulling in Node types.
  */
-export function createApp({ levels, runQuery, submit }: AppDependencies) {
+export function createApp({ levels, runQuery, judge }: AppDependencies) {
   const findLevel = (number: string) =>
     levels.find((candidate) => String(candidate.number) === number);
 
@@ -51,19 +60,34 @@ export function createApp({ levels, runQuery, submit }: AppDependencies) {
         if (!level) {
           return c.json({ error: "No such level." }, 404);
         }
-        if (!submit) {
-          return c.json({ error: "The judge is not connected." }, 503);
+        if (!judge) {
+          return c.json({ error: JUDGE_OFF }, 503);
         }
         try {
-          return c.json(await submit(level, c.req.valid("json")), 200);
+          return c.json(await judge.submit(level, c.req.valid("json")), 200);
         } catch (error) {
           // Judge0 being down or unreachable is not the player's fault, and
           // must not be counted as a verdict.
           console.error(error);
-          return c.json({ error: "The judge could not be reached." }, 503);
+          return c.json({ error: JUDGE_UNREACHABLE }, 503);
         }
       },
-    );
+    )
+    .post("/levels/:number/runs", zValidator("json", runRequestSchema), async (c) => {
+      const level = findLevel(c.req.param("number"));
+      if (!level) {
+        return c.json({ error: "No such level." }, 404);
+      }
+      if (!judge) {
+        return c.json({ error: JUDGE_OFF }, 503);
+      }
+      try {
+        return c.json(await judge.run(level, c.req.valid("json")), 200);
+      } catch (error) {
+        console.error(error);
+        return c.json({ error: JUDGE_UNREACHABLE }, 503);
+      }
+    });
 
   app.onError((error, c) => {
     // The details go to the log, never to the player.
