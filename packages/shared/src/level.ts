@@ -16,7 +16,8 @@ export type LevelsManifest = z.infer<typeof levelsManifestSchema>;
 
 /**
  * `<slug>/problem.yaml`. A subset of the Kattis problem package format, plus
- * our own `version`. Unknown Kattis keys (author, license, ...) are ignored.
+ * our own `version`, `concepts` and the two difficulties. Unknown Kattis keys
+ * (author, license, ...) are ignored.
  */
 export const problemConfigSchema = z.object({
   /** The level title shown to players. */
@@ -25,6 +26,12 @@ export const problemConfigSchema = z.object({
   uuid: z.uuid(),
   /** Bump whenever the machine, validator or test data changes. */
   version: z.number().int().positive(),
+  /** The idea behind the machine. Names the answer, so it is secret. */
+  concepts: z.array(z.string().min(1)).min(1),
+  /** 1 to 10: how hard the logic is to spot from the samples. */
+  concept_diff: z.number().int().min(1).max(10),
+  /** 1 to 10: how hard the solution is to code once the logic is known. */
+  implement_diff: z.number().int().min(1).max(10),
   limits: z
     .object({
       /** Seconds. */
@@ -58,7 +65,7 @@ export const levelSchema = z.object({
   inputFormat: z.string(),
   /** Contents of `statement/output.tex`. */
   outputFormat: z.string(),
-  /** `data/sample/*`: shown in the observation log at no penalty. */
+  /** `data/sample/*` in numeric order: shown in the observation log at no penalty. */
   samples: z.array(observationSchema),
 });
 export type Level = z.infer<typeof levelSchema>;

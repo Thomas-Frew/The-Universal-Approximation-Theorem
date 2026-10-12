@@ -1,6 +1,7 @@
 import type { Level } from "@uat/shared";
 import type { ReactNode } from "react";
 import { HypothesisPanel } from "../components/HypothesisPanel";
+import { Tex } from "../components/Tex";
 import { toRoman } from "../lib/roman";
 
 type LevelScreenProps = {
@@ -20,7 +21,7 @@ function FormatCard({ title, body }: { title: string; body: string }) {
   return (
     <section className="rounded-md border border-stone bg-vellum p-6">
       <h2 className="text-xl italic">{title}</h2>
-      <p className="mt-2 leading-relaxed">{body}</p>
+      <Tex source={body} />
     </section>
   );
 }

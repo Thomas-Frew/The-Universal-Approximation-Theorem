@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useState } from "react";
 import { flushSync } from "react-dom";
-import { placeholderLevel } from "./fixtures/placeholderLevel";
 import { prefersReducedMotion } from "./lib/motion";
+import { useLevel } from "./lib/useLevel";
 import { IntroScreen } from "./screens/IntroScreen";
 import { LevelScreen } from "./screens/LevelScreen";
 
@@ -11,6 +11,9 @@ type Screen = "intro" | "level";
 
 export function App() {
   const [screen, setScreen] = useState<Screen>("intro");
+  // Asked for on first render, so level 1 has usually arrived by the time the
+  // player has read the intro.
+  const level = useLevel(1);
 
   // Each screen starts at the top, without the smooth-scroll animation.
   useLayoutEffect(() => {
@@ -32,9 +35,28 @@ export function App() {
   const startLevel = useCallback(() => show("level"), [show]);
   const showIntro = useCallback(() => show("intro"), [show]);
 
-  return screen === "intro" ? (
-    <IntroScreen onStart={startLevel} />
-  ) : (
-    <LevelScreen level={placeholderLevel} onExit={showIntro} />
+  if (screen === "intro") {
+    return <IntroScreen onStart={startLevel} />;
+  }
+  if (level.status === "ready") {
+    return <LevelScreen level={level.level} onExit={showIntro} />;
+  }
+  return (
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-6 [view-transition-name:level]">
+      {level.status === "loading" ? (
+        <p className="text-taupe italic">Fetching the machine…</p>
+      ) : (
+        <p role="alert" className="text-oxblood">
+          The machine could not be fetched. {level.message}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={showIntro}
+        className="cursor-pointer rounded-md border border-stone px-4 py-2 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2"
+      >
+        Back
+      </button>
+    </main>
   );
 }
