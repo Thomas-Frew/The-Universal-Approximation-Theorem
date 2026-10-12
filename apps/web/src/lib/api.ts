@@ -2,8 +2,11 @@ import type { AppType } from "@uat/api";
 import {
   type Level,
   levelSchema,
+  type Language,
   type QueryResult,
   queryResultSchema,
+  type SubmissionResult,
+  submissionResultSchema,
 } from "@uat/shared";
 import { hc } from "hono/client";
 
@@ -32,4 +35,26 @@ export async function sendQuery(levelNumber: number, input: string): Promise<Que
     throw new Error(`The server answered ${response.status}.`);
   }
   return queryResultSchema.parse(await response.json());
+}
+
+/** Sends a program to be judged against the level's hidden tests. */
+export async function submitCode(
+  levelNumber: number,
+  language: Language,
+  code: string,
+): Promise<SubmissionResult> {
+  const response = await client.api.levels[":number"].submissions.$post({
+    param: { number: String(levelNumber) },
+    json: { language, code },
+  });
+  if (!response.ok) {
+    // The API explains its own failures as { error }; anything else is a surprise.
+    const body: unknown = await response.json().catch(() => null);
+    const message =
+      body && typeof body === "object" && "error" in body && typeof body.error === "string"
+        ? body.error
+        : `The server answered ${response.status}.`;
+    throw new Error(message);
+  }
+  return submissionResultSchema.parse(await response.json());
 }

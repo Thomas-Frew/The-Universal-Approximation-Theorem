@@ -7,6 +7,7 @@
     "dev": "pnpm --parallel --filter \"./apps/*\" dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "verify": "pnpm --filter @uat/api verify"
+    "verify": "pnpm --filter @uat/api verify",
+    "tunnel": "pnpm --filter @uat/api tunnel"
   }
 }

@@ -6,26 +6,29 @@ import {
 } from "@uat/shared";
 import { type FormEvent, type KeyboardEvent, useState } from "react";
 import { sendQuery } from "../lib/api";
+import type { LogEntry } from "../lib/log";
 import { Label } from "./Label";
 
 type ObservationPanelProps = {
   level: Level;
-  /** What the player has learned by querying, oldest first. */
-  queries: readonly Observation[];
+  /** What the player has learned beyond the samples, oldest first. */
+  log: readonly LogEntry[];
   onObserved: (observation: Observation) => void;
 };
 
 type Notice = { tone: "info" | "error"; text: string };
 
 /** The left-hand panel: ask the machine a question, and see every answer so far. */
-export function ObservationPanel({ level, queries, onObserved }: ObservationPanelProps) {
+const SOURCE_NAMES = { query: "Query", revealed: "Revealed" };
+
+export function ObservationPanel({ level, log, onObserved }: ObservationPanelProps) {
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const rows = [
     ...level.samples.map((observation) => ({ source: "Sample", observation })),
-    ...queries.map((observation) => ({ source: "Query", observation })),
+    ...log.map((entry) => ({ source: SOURCE_NAMES[entry.source], observation: entry })),
   ];
 
   const ask = async () => {
@@ -117,7 +120,7 @@ export function ObservationPanel({ level, queries, onObserved }: ObservationPane
             <th className="pb-2 font-normal">
               <Label>Output</Label>
             </th>
-            <th className="w-24 pb-2 font-normal">
+            <th className="w-28 pb-2 font-normal">
               <Label>Source</Label>
             </th>
           </tr>

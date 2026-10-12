@@ -1,9 +1,10 @@
-import { type Level, type Observation, penaltyOf } from "@uat/shared";
+import { type Level, penaltyOf, type SubmissionResult } from "@uat/shared";
 import { useState } from "react";
 import { HypothesisPanel } from "../components/HypothesisPanel";
 import { Label } from "../components/Label";
 import { ObservationPanel } from "../components/ObservationPanel";
 import { Tex } from "../components/Tex";
+import type { LogEntry } from "../lib/log";
 import { toRoman } from "../lib/roman";
 
 type LevelScreenProps = {
@@ -29,14 +30,29 @@ function FormatCard({ title, body }: { title: string; body: string }) {
   );
 }
 
-/** The level page. Querying works; running and submitting code do not yet. */
+/** The level page: query the machine, then submit code that reproduces it. */
 export function LevelScreen({ level, onExit }: LevelScreenProps) {
   // Kept in memory only for now, so it is lost on reload. It moves to
   // Postgres with the rest of a player's progress.
-  const [queries, setQueries] = useState<Observation[]>([]);
-  // Stays at zero until submissions are judged.
-  const wrongSubmissions = 0;
-  const penalty = penaltyOf({ queries: queries.length, wrongSubmissions });
+  const [log, setLog] = useState<LogEntry[]>([]);
+  const [wrongSubmissions, setWrongSubmissions] = useState(0);
+
+  // A revealed case is in the log too, but only the player's own queries cost.
+  const queries = log.filter((entry) => entry.source === "query").length;
+  const penalty = penaltyOf({ queries, wrongSubmissions });
+
+  const onVerdict = (result: SubmissionResult) => {
+    // Accepted costs nothing, and neither does a program that did not compile.
+    if (result.status === "accepted" || result.status === "compile_error") return;
+    const { revealed } = result;
+    setWrongSubmissions((count) => count + 1);
+    setLog((previous) => {
+      const known = [...level.samples, ...previous].some(
+        (entry) => entry.input === revealed.input,
+      );
+      return known ? previous : [...previous, { ...revealed, source: "revealed" }];
+    });
+  };
 
   return (
     <main className="mx-auto min-h-dvh max-w-[min(104rem,94vw)] py-10 [view-transition-name:level]">
@@ -46,7 +62,7 @@ export function LevelScreen({ level, onExit }: LevelScreenProps) {
           <h1 className="text-4xl font-bold">{level.title}</h1>
         </div>
         <div className="flex items-end gap-8">
-          <Counter label="Queries" value={queries.length} />
+          <Counter label="Queries" value={queries} />
           <Counter label="Wrong answers" value={wrongSubmissions} />
           <Counter label="Penalty" value={penalty} />
           <button
@@ -65,12 +81,14 @@ export function LevelScreen({ level, onExit }: LevelScreenProps) {
           <FormatCard title="Output" body={level.outputFormat} />
           <ObservationPanel
             level={level}
-            queries={queries}
-            onObserved={(observation) => setQueries((previous) => [...previous, observation])}
+            log={log}
+            onObserved={(observation) =>
+              setLog((previous) => [...previous, { ...observation, source: "query" }])
+            }
           />
         </div>
 
-        <HypothesisPanel />
+        <HypothesisPanel levelNumber={level.number} onVerdict={onVerdict} />
       </div>
     </main>
   );

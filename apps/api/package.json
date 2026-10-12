@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "node --env-file-if-exists=.env --watch src/index.ts",
+    "tunnel": "node --env-file-if-exists=.env scripts/tunnel.ts",
     "verify": "node --env-file-if-exists=.env src/verify.ts",
     "typecheck": "tsc"
   },
@@ -14,6 +15,7 @@
     "@hono/node-server": "^2.1.4",
     "@hono/zod-validator": "^0.9.1",
     "@uat/shared": "workspace:*",
+    "fflate": "^0.8.3",
     "hono": "^4.13.13",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"

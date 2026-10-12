@@ -17,6 +17,9 @@ export type LoadedLevel = {
   level: Level;
   dir: string;
   timeLimitMs: number;
+  memoryLimitKb: number;
+  /** Hidden tests, in judging order. Never sent to the browser as a set. */
+  secrets: Case[];
   validator: Program;
   machine: Program;
 };
@@ -96,6 +99,8 @@ async function loadLevel(
     },
     dir,
     timeLimitMs: config.limits.time_limit * 1000,
+    memoryLimitKb: config.limits.memory * 1024,
+    secrets: await loadCases(join(dir, "data", "secret")),
     validator: await prepare(join(dir, "input_validators", "validate.cpp"), cacheDir, [
       join(levelsDir, "include", "testlib.h"),
     ]),
