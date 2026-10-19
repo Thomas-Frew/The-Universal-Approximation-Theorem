@@ -38,6 +38,10 @@ if [ ! -d "$DIR" ]; then
   sed -i "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=$(openssl rand -hex 24)|" judge0.conf
   sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" judge0.conf
   sed -i "s|^JUDGE0_TELEMETRY_ENABLE=.*|JUDGE0_TELEMETRY_ENABLE=false|" judge0.conf
+  # One job per CPU, not Judge0's default of two. Our per-test time limit is
+  # wall-clock (`timeout` in judge.ts), so two jobs sharing a core would each
+  # run at half speed and a correct solution could time out.
+  sed -i "s|^COUNT=.*|COUNT=$(nproc)|" judge0.conf
   # Docker publishes ports past the firewall, so bind to explicit addresses:
   # localhost, and the private VPC address from DigitalOcean's metadata service.
   PRIVATE_IP=$(curl -s http://169.254.169.254/metadata/v1/interfaces/private/0/ipv4/address)

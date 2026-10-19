@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "sounds": "python3 scripts/prepare-sounds.py"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
