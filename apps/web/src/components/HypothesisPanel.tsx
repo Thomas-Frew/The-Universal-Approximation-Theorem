@@ -74,11 +74,11 @@ function describe(result: SubmissionResult): Status {
     case "compile_error":
       return { tone: "error", text: "Compilation error.", detail: result.message };
     case "wrong_answer":
-      return { tone: "error", text: "Wrong answer. The failing case is in your log." };
+      return { tone: "error", text: "Wrong answer. The failing case has been added to your observations." };
     case "runtime_error":
-      return { tone: "error", text: "Runtime error. The failing case is in your log." };
+      return { tone: "error", text: "Runtime error. The failing case has been added to your observations." };
     case "time_limit":
-      return { tone: "error", text: "Time limit exceeded. The failing case is in your log." };
+      return { tone: "error", text: "Time limit exceeded. The failing case has been added to your observations." };
   }
 }
 

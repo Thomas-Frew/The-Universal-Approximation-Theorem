@@ -10,10 +10,11 @@ import {
   type SubmissionRequest,
   type SubmissionResult,
 } from "@uat/shared";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 import type { Database } from "./db/index.ts";
 import { machineAnswers, observations, submissions } from "./db/schema.ts";
 import { GameError } from "./errors.ts";
+import { createGate } from "./gate.ts";
 import type { Judge } from "./judge.ts";
 import type { LoadedLevel } from "./levels.ts";
 import { askMachine } from "./query.ts";
@@ -29,6 +30,32 @@ import { askMachine } from "./query.ts";
  */
 
 const WRONG_VERDICTS = new Set(["wrong_answer", "runtime_error", "time_limit"]);
+
+// Limits against abuse, not game rules: a real player should never meet one.
+
+/**
+ * Validator and machine processes running at once (each query that misses the
+ * answer cache starts one, then the other). They take milliseconds, so this is
+ * plenty for real play while stopping a flood of fresh inputs from forking the
+ * droplet to a standstill.
+ */
+const MAX_MACHINE_PROCESSES = 8;
+
+/**
+ * Judge0 jobs (submissions and Runs) this API has in flight at once. Judge0
+ * queues at most 100 in all, and the demo and the live game share it, so each
+ * keeps well under half.
+ */
+const MAX_JUDGE_JOBS = 10;
+
+/**
+ * Queries one player may make on one version of a level. Every row a player
+ * can add to the shared `machine_answers` cache arrives with a query row of
+ * their own, so this also bounds how much of the cache one session can grow.
+ * Two queries at the very same moment can both pass the check: the cap is
+ * approximate, which is all it needs to be.
+ */
+const MAX_QUERIES_PER_LEVEL = 500;
 
 /** Matches inputs in the database. Inputs can be too long to index directly. */
 const hashInput = (input: string) => createHash("sha256").update(input).digest("hex");
@@ -59,6 +86,15 @@ export function createGame({
     if (!loaded) throw new Error(`Level ${level.id} is not loaded`);
     return loaded;
   };
+
+  const throughMachines = createGate(
+    MAX_MACHINE_PROCESSES,
+    () => new GameError(503, "The machine is busy. Try again in a moment."),
+  );
+  const throughJudge = createGate(
+    MAX_JUDGE_JOBS,
+    () => new GameError(503, "The judge is busy. Try again in a moment."),
+  );
 
   /** Rows for this player on this level's current version. */
   const mine = (
@@ -128,7 +164,7 @@ export function createGame({
     // Only inputs the validator accepted are ever cached, so no need to validate again.
     if (cached) return { status: "ok", input, output: cached.output } satisfies QueryResult;
 
-    const result = await askMachine(loaded, input, { debug });
+    const result = await throughMachines(() => askMachine(loaded, input, { debug }));
     if (result.status === "ok") {
       await db
         .insert(machineAnswers)
@@ -142,6 +178,14 @@ export function createGame({
     const loaded = find(level);
     const input = normaliseInput(rawInput);
     const inputHash = hashInput(input);
+
+    const [made] = await db
+      .select({ queries: count() })
+      .from(observations)
+      .where(and(mine(observations, userId, level), eq(observations.source, "query")));
+    if ((made?.queries ?? 0) >= MAX_QUERIES_PER_LEVEL) {
+      throw new GameError(429, `That is the limit of ${MAX_QUERIES_PER_LEVEL} queries on this machine.`);
+    }
 
     const result = await answerFor(loaded, input, inputHash);
     if (result.status === "ok") {
@@ -165,6 +209,17 @@ export function createGame({
 
   async function submit(userId: string, level: Level, submission: SubmissionRequest) {
     if (!judge) throw new GameError(503, "The judge is not connected.");
+    // Through the gate before the pending row exists, so a turned-away
+    // submission leaves no trace and costs nothing.
+    return throughJudge(() => judgeSubmission(judge, userId, level, submission));
+  }
+
+  async function judgeSubmission(
+    judge: Judge,
+    userId: string,
+    level: Level,
+    submission: SubmissionRequest,
+  ) {
 
     // The pending row goes in first. The database allows one pending row per
     // player, so a second submission while one is judged fails right here.
@@ -229,8 +284,11 @@ export function createGame({
     const { log } = await getProgress(userId, level);
     const all = [...level.samples, ...log.map(({ input, output }: LogEntry) => ({ input, output }))];
     try {
-      return await judge.run(level, submission, all.slice(0, MAX_RUN_OBSERVATIONS));
+      return await throughJudge(() =>
+        judge.run(level, submission, all.slice(0, MAX_RUN_OBSERVATIONS)),
+      );
     } catch (error) {
+      if (error instanceof GameError) throw error;
       console.error(error);
       throw new GameError(503, "The judge could not be reached.");
     }

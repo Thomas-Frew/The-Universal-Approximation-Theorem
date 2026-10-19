@@ -11,6 +11,7 @@ import {
   submissionRequestSchema,
 } from "@uat/shared";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { GameError } from "./errors.ts";
 
 /** What the routes need from Better Auth, kept to plain web types. */
@@ -58,6 +59,17 @@ export type AppDependencies = {
 export function createApp({ auth, levels, demo, game }: AppDependencies) {
   const app = new Hono<{ Variables: Variables }>()
     .basePath("/api")
+    // Before anything reads a body. The schemas cap code and query input at
+    // 64K characters, but only once the whole body has been read; this stops
+    // an oversized one while it arrives (by Content-Length, or by counting
+    // bytes if the header is missing). 256 KB leaves room for JSON escapes:
+    // 64K characters of code full of newlines and quotes is already 128 KB.
+    .use(
+      bodyLimit({
+        maxSize: 256 * 1024,
+        onError: (c) => c.json({ error: "That request is too large." }, 413),
+      }),
+    )
     // Better Auth answers everything under /api/auth itself.
     .on(["GET", "POST"], "/auth/*", (c) => auth.handler(c.req.raw))
     // Every game route needs a player. The browser signs in anonymously before
