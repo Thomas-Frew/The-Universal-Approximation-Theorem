@@ -18,7 +18,7 @@ const { levelsDir, cacheDir, databaseUrl, authSecret, authUrl, demo, debug, judg
 // Checked before anything else: progress lives in Postgres, so without it
 // the API should not start.
 const db = connect(databaseUrl);
-const postgresVersion = await checkConnection(db);
+const postgresVersion = await checkConnection(db, databaseUrl);
 
 // Bring the schema up to date before anything reads it. Already-applied
 // migrations are skipped, so this is instant on every start but the first

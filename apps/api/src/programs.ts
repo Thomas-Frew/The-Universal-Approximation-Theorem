@@ -15,6 +15,8 @@ export type Program = { command: string; args: string[] };
 export type RunResult = {
   /** `null` if the process was killed rather than exiting. */
   exitCode: number | null;
+  /** The signal that killed it, e.g. `SIGKILL` (also what the out-of-memory killer sends). */
+  signal: NodeJS.Signals | null;
   stdout: string;
   stderr: string;
   timedOut: boolean;
@@ -50,9 +52,9 @@ export function run(program: Program, stdin: string, timeoutMs: number): Promise
       clearTimeout(timer);
       reject(error);
     });
-    child.on("close", (exitCode) => {
+    child.on("close", (exitCode, signal) => {
       clearTimeout(timer);
-      resolve({ exitCode, stdout, stderr, timedOut });
+      resolve({ exitCode, signal, stdout, stderr, timedOut });
     });
 
     // A program that exits without reading its input closes the pipe on us;
@@ -60,6 +62,19 @@ export function run(program: Program, stdin: string, timeoutMs: number): Promise
     child.stdin.on("error", () => {});
     child.stdin.end(stdin);
   });
+}
+
+/**
+ * Compiles run one at a time. A testlib validator takes about 265 MB and a few
+ * seconds to compile; several at once on a small server (which is also running
+ * the database and the build) can exhaust its memory.
+ */
+let compileQueue: Promise<unknown> = Promise.resolve();
+function oneAtATime<T>(task: () => Promise<T>): Promise<T> {
+  const result = compileQueue.then(task);
+  // The next task waits for this one whether it succeeds or fails.
+  compileQueue = result.catch(() => {});
+  return result;
 }
 
 const exists = (path: string) =>
@@ -93,7 +108,9 @@ export async function prepare(
   }
   const binary = join(cacheDir, hash.digest("hex"));
 
-  if (!(await exists(binary))) {
+  await oneAtATime(async () => {
+    // Checked again here: an identical file queued earlier may have built it.
+    if (await exists(binary)) return;
     await mkdir(cacheDir, { recursive: true });
     // Compile under a temporary name and rename, so a half-written binary is
     // never mistaken for a finished one.
@@ -104,10 +121,22 @@ export async function prepare(
       "",
       COMPILE_TIMEOUT_MS,
     );
+    if (compiled.timedOut) {
+      throw new Error(
+        `${sourcePath} took over ${COMPILE_TIMEOUT_MS / 1000} s to compile and was stopped. ` +
+          "Normally it takes seconds: the machine is probably short of memory or CPU.",
+      );
+    }
+    if (compiled.signal) {
+      throw new Error(
+        `g++ was killed (${compiled.signal}) compiling ${sourcePath}. ` +
+          "With no timeout, that is usually the out-of-memory killer: the machine is short of memory.",
+      );
+    }
     if (compiled.exitCode !== 0) {
       throw new Error(`${sourcePath} did not compile:\n${compiled.stderr}`);
     }
     await rename(temporary, binary);
-  }
+  });
   return { command: binary, args: [] };
 }

@@ -14,10 +14,12 @@ const WHEEL_GESTURE_GAP_MS = 150;
 type IntroScreenProps = {
   /** Called when the player moves on past the about page. */
   onStart: () => void;
+  /** The public demo: the about page says so. */
+  demo: boolean;
 };
 
 /** The title page and the about page, stacked, with one-screen-at-a-time navigation. */
-export function IntroScreen({ onStart }: IntroScreenProps) {
+export function IntroScreen({ onStart, demo }: IntroScreenProps) {
   const mainRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLElement>(null);
   const aboutRef = useRef<HTMLElement>(null);
@@ -98,7 +100,7 @@ export function IntroScreen({ onStart }: IntroScreenProps) {
   return (
     <main ref={mainRef} className="[view-transition-name:intro]">
       <TitleScreen ref={titleRef} onNext={showAbout} />
-      <AboutScreen ref={aboutRef} onBack={showTitle} onStart={onStart} />
+      <AboutScreen ref={aboutRef} onBack={showTitle} onStart={onStart} demo={demo} />
     </main>
   );
 }

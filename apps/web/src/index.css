@@ -191,7 +191,7 @@
    do nothing and the title is simply there. */
 @media (prefers-reduced-motion: no-preference) {
   .draw-rule {
-    animation: draw-rule 900ms var(--ease-screen) 100ms both;
+    animation: draw-rule 900ms var(--ease-screen) var(--delay, 100ms) both;
   }
 
   .draw-fade {
@@ -244,5 +244,50 @@
   to {
     color: var(--color-ink);
     -webkit-text-stroke-color: transparent;
+  }
+}
+
+/* Solving a level. The demo's completion panel draws itself in: a brass seal
+   (two rings, then a tick, traced like a pen stroke), the ornament, then the
+   words rising into place. Outside the demo, the Solved badge pops in. Like
+   the title, all of it is skipped under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  /* For SVG shapes with pathLength="1": the dash is the whole outline, and
+     sliding its offset from 1 to 0 draws it from start to end. */
+  .draw-stroke {
+    stroke-dasharray: 1;
+    animation: draw-stroke var(--duration, 800ms) cubic-bezier(0.45, 0, 0.25, 1)
+      var(--delay, 0ms) both;
+  }
+
+  .draw-rise {
+    animation: draw-rise 700ms cubic-bezier(0.2, 0.7, 0.2, 1) var(--delay, 0ms) both;
+  }
+
+  .badge-pop {
+    animation: badge-pop 600ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
+  }
+}
+
+@keyframes draw-stroke {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes draw-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes badge-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
   }
 }

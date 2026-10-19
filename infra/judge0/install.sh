@@ -5,9 +5,9 @@
 #
 #   scp infra/judge0/install.sh root@<ip>:/root/ && ssh root@<ip> bash /root/install.sh
 #
-# Judge0 listens on 127.0.0.1:2358 only. Reach it from a laptop with
-#   ssh -N -L 2358:127.0.0.1:2358 root@<ip>
-# In production, change the port binding to the droplet's private VPC address.
+# Judge0 listens on 127.0.0.1:2358 (for `pnpm tunnel` from a laptop) and on
+# the droplet's private VPC address (for the API droplet in the same region).
+# Never on the public address: it runs whatever code it is sent.
 set -euo pipefail
 
 JUDGE0_VERSION=1.13.1
@@ -38,8 +38,10 @@ if [ ! -d "$DIR" ]; then
   sed -i "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=$(openssl rand -hex 24)|" judge0.conf
   sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" judge0.conf
   sed -i "s|^JUDGE0_TELEMETRY_ENABLE=.*|JUDGE0_TELEMETRY_ENABLE=false|" judge0.conf
-  # Docker publishes ports past the firewall, so bind to localhost explicitly.
-  sed -i 's|- "2358:2358"|- "127.0.0.1:2358:2358"|' docker-compose.yml
+  # Docker publishes ports past the firewall, so bind to explicit addresses:
+  # localhost, and the private VPC address from DigitalOcean's metadata service.
+  PRIVATE_IP=$(curl -s http://169.254.169.254/metadata/v1/interfaces/private/0/ipv4/address)
+  sed -i "s|- \"2358:2358\"|- \"127.0.0.1:2358:2358\"\n      - \"$PRIVATE_IP:2358:2358\"|" docker-compose.yml
 fi
 
 cd "$DIR"

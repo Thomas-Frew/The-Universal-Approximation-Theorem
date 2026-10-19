@@ -1,10 +1,11 @@
 import { type Level, penaltyOf, type Progress } from "@uat/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DemoComplete } from "../components/DemoComplete";
 import { HypothesisPanel } from "../components/HypothesisPanel";
 import { Label } from "../components/Label";
 import { ObservationPanel } from "../components/ObservationPanel";
 import { Tex } from "../components/Tex";
+import { prefersReducedMotion } from "../lib/motion";
 import { toRoman } from "../lib/roman";
 
 type LevelScreenProps = {
@@ -21,13 +22,18 @@ const BADGES = {
   solved: { text: "Solved", className: "border-sage bg-sage text-paper" },
 };
 
-/** A small mark beside the title. A level not yet touched has none. */
-function StatusBadge({ status }: { status: Progress["status"] }) {
+/**
+ * A small mark beside the title. A level not yet touched has none. `celebrate`
+ * plays a short flourish, for the moment the level is solved.
+ */
+function StatusBadge({ status, celebrate }: { status: Progress["status"]; celebrate: boolean }) {
   if (status === "new") return null;
   const badge = BADGES[status];
   return (
     <span
-      className={`rounded-full border px-3 py-1 text-xs tracking-label uppercase ${badge.className}`}
+      // A new key per status remounts the badge, so its flourish plays on change.
+      key={status}
+      className={`rounded-full border px-3 py-1 text-xs tracking-label uppercase ${badge.className} ${celebrate ? "badge-pop" : ""}`}
     >
       {badge.text}
     </span>
@@ -60,6 +66,33 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
   const { queries, wrongSubmissions } = progress;
   const penalty = penaltyOf({ queries, wrongSubmissions });
 
+  // True once the player solves the level while on this screen; not when they
+  // open a level they solved before, which simply shows as solved.
+  const [justSolved, setJustSolved] = useState(false);
+  const updateProgress = (next: Progress) => {
+    if (next.status === "solved" && progress.status !== "solved") setJustSolved(true);
+    setProgress(next);
+  };
+
+  // In the demo, solving swaps the editor for the "coming soon" panel. A beat
+  // on "Accepted.", then the editor fades out and the panel draws itself in.
+  const [rightPanel, setRightPanel] = useState<"editor" | "leaving" | "complete">(
+    demo && initialProgress.status === "solved" ? "complete" : "editor",
+  );
+  useEffect(() => {
+    if (!demo || !justSolved) return;
+    if (prefersReducedMotion()) {
+      setRightPanel("complete");
+      return;
+    }
+    const fadeOut = setTimeout(() => setRightPanel("leaving"), 900);
+    const swap = setTimeout(() => setRightPanel("complete"), 1400);
+    return () => {
+      clearTimeout(fadeOut);
+      clearTimeout(swap);
+    };
+  }, [demo, justSolved]);
+
   return (
     <main className="mx-auto min-h-dvh max-w-[min(104rem,94vw)] py-10 [view-transition-name:level]">
       <header className="flex items-end justify-between border-b border-stone pb-4">
@@ -67,7 +100,7 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
           <Label>Level {toRoman(level.number)}</Label>
           <div className="flex items-center gap-4">
             <h1 className="text-4xl font-bold">{level.title}</h1>
-            <StatusBadge status={progress.status} />
+            <StatusBadge status={progress.status} celebrate={justSolved} />
           </div>
         </div>
         <div className="flex items-end gap-8">
@@ -91,15 +124,24 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
           <ObservationPanel
             level={level}
             log={progress.log}
-            onProgress={setProgress}
+            onProgress={updateProgress}
           />
         </div>
 
-        {demo && progress.status === "solved" ? (
-          <DemoComplete levelTitle={level.title} penalty={penalty} />
-        ) : (
-          <HypothesisPanel levelNumber={level.number} onProgress={setProgress} />
-        )}
+        {/* One frame for the right-hand side. When the demo is solved, the
+            frame stays and only its content changes: the editor fades out,
+            then the completion panel draws itself in. */}
+        <section className="flex min-h-[40rem] flex-col rounded-md border border-stone bg-vellum p-6">
+          {rightPanel === "complete" ? (
+            <DemoComplete levelTitle={level.title} penalty={penalty} celebrate={justSolved} />
+          ) : (
+            <div
+              className={`flex flex-1 flex-col transition-opacity duration-500 ease-out ${rightPanel === "leaving" ? "opacity-0" : ""}`}
+            >
+              <HypothesisPanel levelNumber={level.number} onProgress={updateProgress} />
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );

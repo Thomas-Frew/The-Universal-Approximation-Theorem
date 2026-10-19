@@ -156,7 +156,9 @@ export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProp
   const run = () => withJudge("run", () => checkAgainstLog(drafts[language]));
 
   return (
-    <section className="flex min-h-[40rem] flex-col rounded-md border border-stone bg-vellum p-6">
+    // Content only: the frame around it belongs to the level screen, so it
+    // stays in place if this panel gives way to another.
+    <div className="flex flex-1 flex-col">
       <div className="flex items-end justify-between gap-6">
         <div>
           <h2 className="text-xl italic">Your hypothesis</h2>
@@ -274,6 +276,6 @@ export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProp
           {busy === "submit" ? "Judging" : "Submit"}
         </button>
       </div>
-    </section>
+    </div>
   );
 }

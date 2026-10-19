@@ -5,9 +5,11 @@ type AboutScreenProps = {
   ref: Ref<HTMLElement>;
   onBack: () => void;
   onStart: () => void;
+  /** The public demo: say what it holds, and that more is coming. */
+  demo: boolean;
 };
 
-export function AboutScreen({ ref, onBack, onStart }: AboutScreenProps) {
+export function AboutScreen({ ref, onBack, onStart, demo }: AboutScreenProps) {
   return (
     <section
       ref={ref}
@@ -33,6 +35,15 @@ export function AboutScreen({ ref, onBack, onStart }: AboutScreenProps) {
             learning patterns from examples alone. Let's see just how good it
             is…
           </p>
+          {demo && (
+            <aside className="pt-7">
+              <span className="mx-auto block h-px w-16 bg-brass" aria-hidden="true" />
+              <p className="mt-10 text-taupe italic">
+                Note: This demo only has a single machine. The full game, with a whole
+                workshop of them, is coming soon.
+              </p>
+            </aside>
+          )}
         </div>
       </div>
 

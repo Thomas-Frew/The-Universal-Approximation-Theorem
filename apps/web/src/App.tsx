@@ -36,7 +36,11 @@ export function App() {
   const showIntro = useCallback(() => show("intro"), [show]);
 
   if (screen === "intro") {
-    return <IntroScreen onStart={startLevel} />;
+    // Whether this is the demo comes from the API with level 1; until it
+    // answers, the about page simply says nothing about it.
+    return (
+      <IntroScreen onStart={startLevel} demo={level.status === "ready" && level.demo} />
+    );
   }
   if (level.status === "ready") {
     return (
