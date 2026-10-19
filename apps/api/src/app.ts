@@ -35,6 +35,7 @@ export type GameDependencies = {
     submission: SubmissionRequest,
   ) => Promise<{ verdict: SubmissionResult; progress: Progress }>;
   run: (userId: string, level: Level, submission: SubmissionRequest) => Promise<RunResult>;
+  resetProgress: (userId: string, level: Level) => Promise<Progress>;
 };
 
 /** Values the middleware attaches to each request, read with `c.get(...)`. */
@@ -94,7 +95,15 @@ export function createApp({ auth, levels, demo, game }: AppDependencies) {
     )
     .post("/levels/:number/runs", zValidator("json", runRequestSchema), async (c) =>
       c.json(await game.run(c.get("userId"), c.get("level"), c.req.valid("json")), 200),
-    );
+    )
+    // Start the level afresh. Demo only: in the full game it would let a
+    // player wipe a bad penalty.
+    .delete("/levels/:number/progress", async (c) => {
+      if (!demo) {
+        throw new GameError(403, "Progress can only be reset in the demo.");
+      }
+      return c.json({ progress: await game.resetProgress(c.get("userId"), c.get("level")) }, 200);
+    });
 
   app.onError((error, c) => {
     // Problems the player should hear about carry their own status and message.

@@ -5,6 +5,7 @@ import { HypothesisPanel } from "../components/HypothesisPanel";
 import { Label } from "../components/Label";
 import { ObservationPanel } from "../components/ObservationPanel";
 import { Tex } from "../components/Tex";
+import { resetProgress } from "../lib/api";
 import { prefersReducedMotion } from "../lib/motion";
 import { toRoman } from "../lib/roman";
 
@@ -97,7 +98,7 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
     <main className="mx-auto min-h-dvh max-w-[min(104rem,94vw)] py-10 [view-transition-name:level]">
       <header className="flex items-end justify-between border-b border-stone pb-4">
         <div>
-          <Label>Level {toRoman(level.number)}</Label>
+          <Label>Machine {toRoman(level.number)}</Label>
           <div className="flex items-center gap-4">
             <h1 className="text-4xl font-bold">{level.title}</h1>
             <StatusBadge status={progress.status} celebrate={justSolved} />
@@ -133,7 +134,16 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
             then the completion panel draws itself in. */}
         <section className="flex min-h-[40rem] flex-col rounded-md border border-stone bg-vellum p-6">
           {rightPanel === "complete" ? (
-            <DemoComplete levelTitle={level.title} penalty={penalty} celebrate={justSolved} />
+            <DemoComplete
+              levelTitle={level.title}
+              penalty={penalty}
+              celebrate={justSolved}
+              onStartAgain={async () => {
+                setProgress(await resetProgress(level.number));
+                setJustSolved(false);
+                setRightPanel("editor");
+              }}
+            />
           ) : (
             <div
               className={`flex flex-1 flex-col transition-opacity duration-500 ease-out ${rightPanel === "leaving" ? "opacity-0" : ""}`}

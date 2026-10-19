@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 type DemoCompleteProps = {
   levelTitle: string;
   penalty: number;
@@ -6,13 +8,34 @@ type DemoCompleteProps = {
    * in index.css). Otherwise it simply appears, e.g. when reopening the demo.
    */
   celebrate: boolean;
+  /** Clears the player's progress and returns them to the start of the level. */
+  onStartAgain: () => Promise<void>;
 };
+
+const buttonBase =
+  "cursor-pointer rounded-md border px-6 py-3 text-xs tracking-label uppercase outline-offset-4 outline-walnut transition-colors focus-visible:outline-2 disabled:cursor-default disabled:opacity-60";
 
 /**
  * Takes the editor's place once the demo's only level is solved. The left
  * panel stays, so the player can still look back over their observations.
  */
-export function DemoComplete({ levelTitle, penalty, celebrate }: DemoCompleteProps) {
+export function DemoComplete({ levelTitle, penalty, celebrate, onStartAgain }: DemoCompleteProps) {
+  // Starting again erases the player's log and submissions, so it takes two
+  // clicks: the first asks, the second does it.
+  const [step, setStep] = useState<"idle" | "confirm" | "working">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  const startAgain = async () => {
+    setStep("working");
+    setError(null);
+    try {
+      await onStartAgain();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "That did not work.");
+      setStep("confirm");
+    }
+  };
+
   // Each piece takes its animation class only when celebrating. `--delay`
   // staggers them: seal, ornament, then the words.
   const play = (className: string) => (celebrate ? className : "");
@@ -68,6 +91,45 @@ export function DemoComplete({ levelTitle, penalty, celebrate }: DemoCompletePro
         You solved {levelTitle} with a penalty of{" "}
         <span className="font-mono not-italic">{penalty}</span>.
       </p>
+
+      <div className={`mt-10 flex flex-col items-center gap-3 ${play("draw-rise [--delay:2300ms]")}`}>
+        {step === "idle" ? (
+          <button
+            type="button"
+            onClick={() => setStep("confirm")}
+            className={`${buttonBase} border-stone bg-paper hover:bg-linen`}
+          >
+            Start again
+          </button>
+        ) : (
+          <>
+            <p className="text-sm text-taupe">This clears your observations and submissions.</p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setStep("idle")}
+                disabled={step === "working"}
+                className={`${buttonBase} border-stone bg-paper hover:bg-linen`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void startAgain()}
+                disabled={step === "working"}
+                className={`${buttonBase} border-walnut bg-walnut text-paper hover:bg-ink`}
+              >
+                {step === "working" ? "Clearing" : "Clear and start again"}
+              </button>
+            </div>
+          </>
+        )}
+        {error && (
+          <p role="alert" className="text-sm text-oxblood">
+            {error}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

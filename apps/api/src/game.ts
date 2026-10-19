@@ -235,6 +235,19 @@ export function createGame({
   }
 
   /**
+   * Deletes this player's observations and submissions on the level's current
+   * version, so they start it afresh. Only the demo offers this (see app.ts):
+   * in the full game it would let a player erase a bad penalty.
+   */
+  async function resetProgress(userId: string, level: Level): Promise<Progress> {
+    await db.transaction(async (tx) => {
+      await tx.delete(observations).where(mine(observations, userId, level));
+      await tx.delete(submissions).where(mine(submissions, userId, level));
+    });
+    return getProgress(userId, level);
+  }
+
+  /**
    * A submission left `pending` means the API stopped while judging it. Without
    * this, the one-pending rule would block that player for good.
    */
@@ -247,7 +260,7 @@ export function createGame({
     return released.length;
   }
 
-  return { getProgress, query, submit, run, releaseStuckSubmissions };
+  return { getProgress, query, submit, run, resetProgress, releaseStuckSubmissions };
 }
 
 export type Game = ReturnType<typeof createGame>;

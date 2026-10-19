@@ -6,9 +6,9 @@
 export class GameError extends Error {
   // Spelled out rather than `constructor(readonly status ...)`: that shorthand
   // needs compiling, and Node runs this file as it is.
-  readonly status: 404 | 409 | 503;
+  readonly status: 403 | 404 | 409 | 503;
 
-  constructor(status: 404 | 409 | 503, message: string) {
+  constructor(status: 403 | 404 | 409 | 503, message: string) {
     super(message);
     this.status = status;
   }

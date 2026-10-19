@@ -2,12 +2,13 @@ import type { AppType } from "@uat/api";
 import {
   type Language,
   levelResponseSchema,
+  progressSchema,
   queryResponseSchema,
   type RunResult,
   runResultSchema,
   submissionResponseSchema,
 } from "@uat/shared";
-import type { z } from "zod";
+import { z } from "zod";
 import { hc } from "hono/client";
 import { ensureSession } from "./session";
 
@@ -76,4 +77,14 @@ export async function runCode(
   });
   if (!response.ok) throw await failure(response);
   return runResultSchema.parse(await response.json());
+}
+
+/** Clears the player's progress on a level, so they start it afresh. Demo only. */
+export async function resetProgress(levelNumber: number) {
+  await ensureSession();
+  const response = await client.api.levels[":number"].progress.$delete({
+    param: { number: String(levelNumber) },
+  });
+  if (!response.ok) throw await failure(response);
+  return z.object({ progress: progressSchema }).parse(await response.json()).progress;
 }
