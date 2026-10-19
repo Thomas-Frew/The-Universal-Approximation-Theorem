@@ -69,6 +69,10 @@
   /* Full-height screens snap into place; pages without snap points scroll normally. */
   html {
     @apply snap-y snap-mandatory;
+    /* Phone browsers (iOS turned sideways, especially) otherwise enlarge some
+       text on their own. Sizes here are already chosen for small screens. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {

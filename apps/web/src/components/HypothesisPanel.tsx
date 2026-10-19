@@ -189,7 +189,8 @@ export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProp
     // Content only: the frame around it belongs to the level screen, so it
     // stays in place if this panel gives way to another.
     <div className="flex flex-1 flex-col">
-      <div className="flex items-end justify-between gap-6">
+      {/* The language picker drops below the heading when there is no room beside it. */}
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div>
           <h2 className="text-xl italic">Your hypothesis</h2>
           <p className="mt-1 text-sm text-taupe">
