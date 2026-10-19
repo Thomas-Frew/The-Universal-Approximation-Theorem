@@ -22,5 +22,10 @@ export const progressSchema = z.object({
   /** Counted only up to the first accepted submission: solving freezes the penalty. */
   queries: z.number().int().nonnegative(),
   wrongSubmissions: z.number().int().nonnegative(),
+  /**
+   * `solution` from problem.yaml, saying what the machine does. Secret until
+   * earned: the API includes it only when `status` is `solved`.
+   */
+  solution: z.string().optional(),
 });
 export type Progress = z.infer<typeof progressSchema>;

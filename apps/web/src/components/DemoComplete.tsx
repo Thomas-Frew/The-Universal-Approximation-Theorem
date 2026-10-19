@@ -1,8 +1,8 @@
 import { useState } from "react";
 
 type DemoCompleteProps = {
-  levelTitle: string;
-  penalty: number;
+  /** What the machine does, in words; the API sends it once the level is solved. */
+  solution: string | undefined;
   /**
    * Solved just now, on this screen: draw the panel in (see "Solving a level"
    * in index.css). Otherwise it simply appears, e.g. when reopening the demo.
@@ -19,7 +19,7 @@ const buttonBase =
  * Takes the editor's place once the demo's only level is solved. The left
  * panel stays, so the player can still look back over their observations.
  */
-export function DemoComplete({ levelTitle, penalty, celebrate, onStartAgain }: DemoCompleteProps) {
+export function DemoComplete({ solution, celebrate, onStartAgain }: DemoCompleteProps) {
   // Starting again erases the player's log and submissions, so it takes two
   // clicks: the first asks, the second does it.
   const [step, setStep] = useState<"idle" | "confirm" | "working">("idle");
@@ -87,10 +87,11 @@ export function DemoComplete({ levelTitle, penalty, celebrate, onStartAgain }: D
       <h2 className={`mt-8 text-4xl font-bold ${play("draw-rise [--delay:1700ms]")}`}>
         The full game is coming soon.
       </h2>
-      <p className={`mt-4 text-lg text-taupe italic ${play("draw-rise [--delay:1900ms]")}`}>
-        You solved {levelTitle} with a penalty of{" "}
-        <span className="font-mono not-italic">{penalty}</span>.
-      </p>
+      {solution && (
+        <p className={`mt-4 max-w-xl text-lg text-taupe italic ${play("draw-rise [--delay:1900ms]")}`}>
+          Solution: {solution}
+        </p>
+      )}
 
       <div className={`mt-10 flex flex-col items-center gap-3 ${play("draw-rise [--delay:2300ms]")}`}>
         {step === "idle" ? (

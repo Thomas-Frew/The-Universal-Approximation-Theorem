@@ -101,6 +101,8 @@ export function createGame({
         : entries.length > 0 || attempts.length > 0
           ? "in_progress"
           : "new",
+      // The answer, in words: the reward for solving, so never sent before.
+      ...(solvedAt && { solution: find(level).solution }),
       log: entries.map(({ input, output, source }) => ({ input, output, source })),
       queries: entries.filter((entry) => entry.source === "query" && counts(entry.createdAt))
         .length,

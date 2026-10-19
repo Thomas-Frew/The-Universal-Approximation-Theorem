@@ -142,8 +142,7 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
         <section className="flex min-h-[40rem] flex-col rounded-md border border-stone bg-vellum p-6">
           {rightPanel === "complete" ? (
             <DemoComplete
-              levelTitle={level.title}
-              penalty={penalty}
+              solution={progress.solution}
               celebrate={justSolved}
               onStartAgain={async () => {
                 setProgress(await resetProgress(level.number));
