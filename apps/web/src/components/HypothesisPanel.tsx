@@ -78,7 +78,7 @@ function describe(result: SubmissionResult): Status {
 
 /** The right-hand panel: pick a language, write the code, run or submit it. */
 export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProps) {
-  const [language, setLanguage] = useState<Language>("python");
+  const [language, setLanguage] = useState<Language>("cpp");
   // One draft per language, so switching language does not lose your work.
   const [drafts, setDrafts] = useState(STARTER_CODE);
   // Which button is waiting on the judge, if any. Only one at a time.
@@ -168,19 +168,37 @@ export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProp
           <span className="text-xs tracking-label text-taupe uppercase">
             Language
           </span>
-          <select
-            value={language}
-            onChange={(event) =>
-              setLanguage(languageSchema.parse(event.target.value))
-            }
-            className="cursor-pointer rounded-md border border-stone bg-paper px-3 py-2 font-mono text-sm outline-offset-2 outline-walnut focus-visible:outline-2"
-          >
-            {languageSchema.options.map((option) => (
-              <option key={option} value={option}>
-                {LANGUAGE_NAMES[option]}
-              </option>
-            ))}
-          </select>
+          {/* The browser's own arrow cannot be spaced, so it is hidden
+              (appearance-none) and drawn here instead, with room around it. */}
+          <span className="relative">
+            <select
+              value={language}
+              onChange={(event) =>
+                setLanguage(languageSchema.parse(event.target.value))
+              }
+              className="cursor-pointer appearance-none rounded-md border border-stone bg-paper py-2 pr-10 pl-3 font-mono text-sm outline-offset-2 outline-walnut focus-visible:outline-2"
+            >
+              {languageSchema.options.map((option) => (
+                <option key={option} value={option}>
+                  {LANGUAGE_NAMES[option]}
+                </option>
+              ))}
+            </select>
+            <svg
+              viewBox="0 0 10 6"
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 right-3 w-2.5 -translate-y-1/2 text-taupe"
+            >
+              <path
+                d="M1 1l4 4 4-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
         </label>
       </div>
 

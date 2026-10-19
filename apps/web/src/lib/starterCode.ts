@@ -6,7 +6,12 @@ export const LANGUAGE_NAMES: Record<Language, string> = {
   go: "Go",
 };
 
-/** What the editor shows before the player has typed anything. */
+/**
+ * What the editor shows before the player has typed anything. Each one ends by
+ * printing a placeholder answer, to show how output is expected: written to
+ * standard output, followed by a newline. The value and its type are only an
+ * example; each level's Output box says what to print.
+ */
 export const STARTER_CODE: Record<Language, string> = {
   python: `import sys
 
@@ -14,7 +19,8 @@ export const STARTER_CODE: Record<Language, string> = {
 def main() -> None:
     data = sys.stdin.read().split()
     # What does the machine do with its input?
-    print()
+    ans = 0
+    print(ans)
 
 
 main()
@@ -24,6 +30,8 @@ using namespace std;
 
 int main() {
     // What does the machine do with its input?
+    int ans = 0;
+    cout << ans << '\\n';
     return 0;
 }
 `,
@@ -39,7 +47,8 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	_ = reader
 	// What does the machine do with its input?
-	fmt.Println()
+	ans := 0
+	fmt.Println(ans)
 }
 `,
 };
