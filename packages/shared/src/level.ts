@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Folder name of a level in the levels repo, e.g. `doubling-lens`. */
+/** Folder name of a level in the levels repo, e.g. `duplicator`. */
 export const levelSlugSchema = z
   .string()
   .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Use lowercase letters, digits and hyphens");
@@ -70,6 +70,7 @@ export const levelSchema = z.object({
 });
 export type Level = z.infer<typeof levelSchema>;
 
-/** Languages a player can submit in. */
-export const languageSchema = z.enum(["python", "cpp", "go"]);
+/** Languages a player can submit in, as a tuple so the database enum can reuse it. */
+export const LANGUAGES = ["python", "cpp", "go"] as const;
+export const languageSchema = z.enum(LANGUAGES);
 export type Language = z.infer<typeof languageSchema>;

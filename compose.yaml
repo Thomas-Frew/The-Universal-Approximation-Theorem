@@ -1,0 +1,26 @@
+# Local development services. Start with `pnpm db:up`.
+#
+# Only Postgres runs here; the API runs directly on your machine (`pnpm dev`)
+# so file watching and restarts stay fast.
+services:
+  db:
+    image: postgres:17
+    environment:
+      # Local-only credentials: the port is bound to localhost, so nothing
+      # outside this machine can reach the database.
+      POSTGRES_USER: uat
+      POSTGRES_PASSWORD: uat
+      POSTGRES_DB: uat
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # A named volume keeps the data when the container is removed.
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "uat", "-d", "uat"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  db-data:

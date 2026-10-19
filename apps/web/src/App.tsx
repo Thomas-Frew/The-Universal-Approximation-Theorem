@@ -39,7 +39,9 @@ export function App() {
     return <IntroScreen onStart={startLevel} />;
   }
   if (level.status === "ready") {
-    return <LevelScreen level={level.level} onExit={showIntro} />;
+    return (
+      <LevelScreen level={level.level} initialProgress={level.progress} onExit={showIntro} />
+    );
   }
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-6 [view-transition-name:level]">

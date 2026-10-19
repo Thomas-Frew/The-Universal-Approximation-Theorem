@@ -1,16 +1,35 @@
-import { type Level, penaltyOf, type SubmissionResult } from "@uat/shared";
+import { type Level, penaltyOf, type Progress } from "@uat/shared";
 import { useState } from "react";
 import { HypothesisPanel } from "../components/HypothesisPanel";
 import { Label } from "../components/Label";
 import { ObservationPanel } from "../components/ObservationPanel";
 import { Tex } from "../components/Tex";
-import type { LogEntry } from "../lib/log";
 import { toRoman } from "../lib/roman";
 
 type LevelScreenProps = {
   level: Level;
+  /** The player's progress when the level was fetched. */
+  initialProgress: Progress;
   onExit: () => void;
 };
+
+const BADGES = {
+  in_progress: { text: "In progress", className: "border-stone text-taupe" },
+  solved: { text: "Solved", className: "border-sage bg-sage text-paper" },
+};
+
+/** A small mark beside the title. A level not yet touched has none. */
+function StatusBadge({ status }: { status: Progress["status"] }) {
+  if (status === "new") return null;
+  const badge = BADGES[status];
+  return (
+    <span
+      className={`rounded-full border px-3 py-1 text-xs tracking-label uppercase ${badge.className}`}
+    >
+      {badge.text}
+    </span>
+  );
+}
 
 function Counter({ label, value }: { label: string; value: number }) {
   return (
@@ -31,35 +50,22 @@ function FormatCard({ title, body }: { title: string; body: string }) {
 }
 
 /** The level page: query the machine, then submit code that reproduces it. */
-export function LevelScreen({ level, onExit }: LevelScreenProps) {
-  // Kept in memory only for now, so it is lost on reload. It moves to
-  // Postgres with the rest of a player's progress.
-  const [log, setLog] = useState<LogEntry[]>([]);
-  const [wrongSubmissions, setWrongSubmissions] = useState(0);
-
-  // A revealed case is in the log too, but only the player's own queries cost.
-  const queries = log.filter((entry) => entry.source === "query").length;
+export function LevelScreen({ level, initialProgress, onExit }: LevelScreenProps) {
+  // The server's word on where the player stands. Every query and submission
+  // answers with a fresh copy, which simply replaces this one.
+  const [progress, setProgress] = useState(initialProgress);
+  const { queries, wrongSubmissions } = progress;
   const penalty = penaltyOf({ queries, wrongSubmissions });
-
-  const onVerdict = (result: SubmissionResult) => {
-    // Accepted costs nothing, and neither does a program that did not compile.
-    if (result.status === "accepted" || result.status === "compile_error") return;
-    const { revealed } = result;
-    setWrongSubmissions((count) => count + 1);
-    setLog((previous) => {
-      const known = [...level.samples, ...previous].some(
-        (entry) => entry.input === revealed.input,
-      );
-      return known ? previous : [...previous, { ...revealed, source: "revealed" }];
-    });
-  };
 
   return (
     <main className="mx-auto min-h-dvh max-w-[min(104rem,94vw)] py-10 [view-transition-name:level]">
       <header className="flex items-end justify-between border-b border-stone pb-4">
         <div>
           <Label>Level {toRoman(level.number)}</Label>
-          <h1 className="text-4xl font-bold">{level.title}</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-4xl font-bold">{level.title}</h1>
+            <StatusBadge status={progress.status} />
+          </div>
         </div>
         <div className="flex items-end gap-8">
           <Counter label="Queries" value={queries} />
@@ -81,18 +87,12 @@ export function LevelScreen({ level, onExit }: LevelScreenProps) {
           <FormatCard title="Output" body={level.outputFormat} />
           <ObservationPanel
             level={level}
-            log={log}
-            onObserved={(observation) =>
-              setLog((previous) => [...previous, { ...observation, source: "query" }])
-            }
+            log={progress.log}
+            onProgress={setProgress}
           />
         </div>
 
-        <HypothesisPanel
-          levelNumber={level.number}
-          observations={[...level.samples, ...log]}
-          onVerdict={onVerdict}
-        />
+        <HypothesisPanel levelNumber={level.number} onProgress={setProgress} />
       </div>
     </main>
   );

@@ -1,7 +1,7 @@
 import {
   type Language,
   languageSchema,
-  type Observation,
+  type Progress,
   type RunOutcome,
   type SubmissionResult,
 } from "@uat/shared";
@@ -13,10 +13,8 @@ import { Label } from "./Label";
 
 type HypothesisPanelProps = {
   levelNumber: number;
-  /** Everything in the player's log, samples included. Run checks against these. */
-  observations: readonly Observation[];
-  /** Called with every verdict, so the screen can update counters and the log. */
-  onVerdict: (result: SubmissionResult) => void;
+  /** The player's progress after every verdict: counters, log and solved state. */
+  onProgress: (progress: Progress) => void;
 };
 
 type Status = {
@@ -25,10 +23,8 @@ type Status = {
   /** Compiler output, shown above the status line. */
   detail?: string;
   /** Observations a Run got wrong, shown above the status line. */
-  mismatches?: Mismatch[];
+  mismatches?: RunOutcome[];
 };
-
-type Mismatch = { observation: Observation; outcome: RunOutcome };
 
 const OUTCOME_NOTES: Partial<Record<RunOutcome["verdict"], string>> = {
   runtime_error: "runtime error",
@@ -81,11 +77,7 @@ function describe(result: SubmissionResult): Status {
 }
 
 /** The right-hand panel: pick a language, write the code, run or submit it. */
-export function HypothesisPanel({
-  levelNumber,
-  observations,
-  onVerdict,
-}: HypothesisPanelProps) {
+export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProps) {
   const [language, setLanguage] = useState<Language>("python");
   // One draft per language, so switching language does not lose your work.
   const [drafts, setDrafts] = useState(STARTER_CODE);
@@ -121,34 +113,47 @@ export function HypothesisPanel({
     }
   };
 
+  // Checks code against what the player has already seen (samples and log).
+  // It is free and touches no hidden test, which is why it may show the
+  // program's own output.
+  const checkAgainstLog = async (code: string): Promise<Status> => {
+    const result = await runCode(levelNumber, language, code);
+    if (result.status === "compile_error") {
+      return { tone: "error", text: "Compilation error.", detail: result.message };
+    }
+    const mismatches = result.outcomes.filter((outcome) => outcome.verdict !== "passed");
+    const total = result.outcomes.length;
+    return mismatches.length === 0
+      ? { tone: "success", text: `Matches all ${total} observations.` }
+      : {
+          tone: "error",
+          text: `Differs on ${mismatches.length} of ${total} observations.`,
+          mismatches,
+        };
+  };
+
   const submit = () =>
     withJudge("submit", async () => {
-      const result = await submitCode(levelNumber, language, drafts[language]);
-      onVerdict(result);
-      return describe(result);
+      const code = drafts[language];
+      const { verdict, progress } = await submitCode(levelNumber, language, code);
+      onProgress(progress);
+      const status = describe(verdict);
+      if (!("revealed" in verdict)) return status;
+
+      // A wrong submission has just added the failing case to the log, so a
+      // Run against the log now shows where the code differs, that case
+      // included. Only the one revealed hidden case is involved: the program's
+      // output on the other hidden tests is never shown.
+      try {
+        const { mismatches } = await checkAgainstLog(code);
+        return { ...status, mismatches };
+      } catch {
+        // The verdict stands even if the follow-up Run cannot reach the judge.
+        return status;
+      }
     });
 
-  // Run checks the code against what the player has already seen. It is free
-  // and says nothing about the hidden tests.
-  const run = () =>
-    withJudge("run", async () => {
-      const result = await runCode(levelNumber, language, drafts[language], observations);
-      if (result.status === "compile_error") {
-        return { tone: "error", text: "Compilation error.", detail: result.message };
-      }
-      const mismatches = observations.flatMap((observation, index) => {
-        const outcome = result.outcomes[index];
-        return outcome && outcome.verdict !== "passed" ? [{ observation, outcome }] : [];
-      });
-      const total = observations.length;
-      return mismatches.length === 0
-        ? { tone: "success", text: `Matches all ${total} observations.` }
-        : {
-            tone: "error",
-            text: `Differs on ${mismatches.length} of ${total} observations.`,
-            mismatches,
-          };
-    });
+  const run = () => withJudge("run", () => checkAgainstLog(drafts[language]));
 
   return (
     <section className="flex min-h-[40rem] flex-col rounded-md border border-stone bg-vellum p-6">
@@ -211,13 +216,13 @@ export function HypothesisPanel({
                 </tr>
               </thead>
               <tbody className="font-mono text-sm">
-                {status.mismatches.map(({ observation, outcome }) => (
-                  <tr key={observation.input} className="align-top">
+                {status.mismatches.map((outcome) => (
+                  <tr key={outcome.input} className="align-top">
                     <td className="py-1 pr-4 whitespace-pre-wrap">
-                      {observation.input.trimEnd()}
+                      {outcome.input.trimEnd()}
                     </td>
                     <td className="py-1 pr-4 whitespace-pre-wrap text-walnut">
-                      {observation.output.trimEnd()}
+                      {outcome.expected.trimEnd()}
                     </td>
                     <td className="py-1 whitespace-pre-wrap text-oxblood">
                       {OUTCOME_NOTES[outcome.verdict] ?? outcome.actual.trimEnd()}

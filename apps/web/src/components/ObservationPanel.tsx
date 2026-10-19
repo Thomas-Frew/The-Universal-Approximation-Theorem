@@ -1,27 +1,28 @@
 import {
   type Level,
+  type LogEntry,
   normaliseText,
-  type Observation,
   PENALTY_COSTS,
+  type Progress,
 } from "@uat/shared";
 import { type FormEvent, type KeyboardEvent, useState } from "react";
 import { sendQuery } from "../lib/api";
-import type { LogEntry } from "../lib/log";
 import { Label } from "./Label";
 
 type ObservationPanelProps = {
   level: Level;
   /** What the player has learned beyond the samples, oldest first. */
   log: readonly LogEntry[];
-  onObserved: (observation: Observation) => void;
+  /** The player's progress after a query the machine answered. */
+  onProgress: (progress: Progress) => void;
 };
 
 type Notice = { tone: "info" | "error"; text: string };
 
-/** The left-hand panel: ask the machine a question, and see every answer so far. */
 const SOURCE_NAMES = { query: "Query", revealed: "Revealed" };
 
-export function ObservationPanel({ level, log, onObserved }: ObservationPanelProps) {
+/** The left-hand panel: ask the machine a question, and see every answer so far. */
+export function ObservationPanel({ level, log, onProgress }: ObservationPanelProps) {
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -44,11 +45,11 @@ export function ObservationPanel({ level, log, onObserved }: ObservationPanelPro
     setPending(true);
     setNotice(null);
     try {
-      const result = await sendQuery(level.number, input);
+      const { result, progress } = await sendQuery(level.number, input);
       if (result.status === "rejected") {
         setNotice({ tone: "error", text: `Rejected. ${result.message}` });
       } else {
-        onObserved({ input: result.input, output: result.output });
+        onProgress(progress);
         setInput("");
       }
     } catch (error) {

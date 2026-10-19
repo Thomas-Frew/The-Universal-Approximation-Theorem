@@ -6,7 +6,6 @@ import {
   type Observation,
   outputsMatch,
   type RunOutcome,
-  type RunRequest,
   type RunResult,
   type SubmissionRequest,
   type SubmissionResult,
@@ -193,7 +192,11 @@ export type Judge = {
   /** Judge it against the level's hidden tests. Costs the player if it fails. */
   submit: (level: Level, submission: SubmissionRequest) => Promise<SubmissionResult>;
   /** Try it against observations the player already has. Free. */
-  run: (level: Level, request: RunRequest) => Promise<RunResult>;
+  run: (
+    level: Level,
+    submission: SubmissionRequest,
+    observations: readonly Observation[],
+  ) => Promise<RunResult>;
 };
 
 export function createJudge(levels: readonly LoadedLevel[], judge0Url: string): Judge {
@@ -292,7 +295,7 @@ export function createJudge(levels: readonly LoadedLevel[], judge0Url: string): 
 
     // Only the player's own observations go into the sandbox here, never a
     // hidden test, which is why this may send the program's output back.
-    async run(level, { observations, ...submission }) {
+    async run(level, submission, observations) {
       const execution = await execute(
         find(level),
         submission,
@@ -307,6 +310,8 @@ export function createJudge(levels: readonly LoadedLevel[], judge0Url: string): 
         outcomes: observations.map((observation, index) => {
           const run = execution.runs[index];
           return {
+            input: observation.input,
+            expected: observation.output,
             verdict: judgeTest(run, observation.output, execution.ranOutOfTime),
             actual: (run?.stdout ?? "").slice(0, MAX_RUN_OUTPUT_LENGTH),
           };

@@ -29,21 +29,22 @@ export const submissionResultSchema = z.discriminatedUnion("status", [
 ]);
 export type SubmissionResult = z.infer<typeof submissionResultSchema>;
 
-/** Most observations one Run will check. */
+/** Most observations one Run will check: the first ones in the log. */
 export const MAX_RUN_OBSERVATIONS = 200;
 /** Longest piece of a program's output a Run sends back, in characters. */
 export const MAX_RUN_OUTPUT_LENGTH = 2_000;
 
 /**
- * A Run: try a program against observations the player already has. It is
- * free, touches no hidden test, and so is allowed to show the program's output.
+ * A Run: try a program against the observations in the player's log (the
+ * samples, then their own entries). It is free, touches no hidden test, and so
+ * is allowed to show the program's output. The server reads the log itself.
  */
-export const runRequestSchema = submissionRequestSchema.extend({
-  observations: z.array(observationSchema).min(1).max(MAX_RUN_OBSERVATIONS),
-});
+export const runRequestSchema = submissionRequestSchema;
 export type RunRequest = z.infer<typeof runRequestSchema>;
 
 export const runOutcomeSchema = z.object({
+  input: z.string(),
+  expected: z.string(),
   verdict: z.enum(["passed", "wrong_answer", "runtime_error", "time_limit"]),
   /** What the program printed, cut to `MAX_RUN_OUTPUT_LENGTH`. */
   actual: z.string(),

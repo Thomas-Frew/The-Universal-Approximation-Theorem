@@ -8,6 +8,10 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "verify": "pnpm --filter @uat/api verify",
-    "tunnel": "pnpm --filter @uat/api tunnel"
+    "tunnel": "pnpm --filter @uat/api tunnel",
+    "db:up": "docker compose up -d --wait db",
+    "db:down": "docker compose stop db",
+    "db:generate": "pnpm --filter @uat/api db:generate",
+    "db:migrate": "pnpm --filter @uat/api db:migrate"
   }
 }

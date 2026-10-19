@@ -1,9 +1,9 @@
 import { zValidator } from "@hono/zod-validator";
 import {
   type Level,
+  type Progress,
   type QueryResult,
   queryRequestSchema,
-  type RunRequest,
   type RunResult,
   runRequestSchema,
   type SubmissionRequest,
@@ -11,86 +11,94 @@ import {
   submissionRequestSchema,
 } from "@uat/shared";
 import { Hono } from "hono";
+import { GameError } from "./errors.ts";
 
-export type AppDependencies = {
-  /** Client-safe levels, in play order. */
-  levels: readonly Level[];
-  /** Asks a level's machine for its answer to an input. */
-  runQuery: (level: Level, input: string) => Promise<QueryResult>;
-  /** Runs player programs in the sandbox. `null` if there is no judge. */
-  judge: {
-    submit: (level: Level, submission: SubmissionRequest) => Promise<SubmissionResult>;
-    run: (level: Level, request: RunRequest) => Promise<RunResult>;
-  } | null;
+/** What the routes need from Better Auth, kept to plain web types. */
+export type AuthDependencies = {
+  /** Better Auth's own endpoints (sign in, get session, sign out). */
+  handler: (request: Request) => Promise<Response>;
+  /** The player behind a request's session cookie, or null if there is none. */
+  getUserId: (headers: Headers) => Promise<string | null>;
 };
 
-const JUDGE_OFF = "The judge is not connected.";
-const JUDGE_UNREACHABLE = "The judge could not be reached.";
+/** The game's rules, as plain functions of a player and a level. See `game.ts`. */
+export type GameDependencies = {
+  getProgress: (userId: string, level: Level) => Promise<Progress>;
+  query: (
+    userId: string,
+    level: Level,
+    input: string,
+  ) => Promise<{ result: QueryResult; progress: Progress }>;
+  submit: (
+    userId: string,
+    level: Level,
+    submission: SubmissionRequest,
+  ) => Promise<{ verdict: SubmissionResult; progress: Progress }>;
+  run: (userId: string, level: Level, submission: SubmissionRequest) => Promise<RunResult>;
+};
+
+/** Values the middleware attaches to each request, read with `c.get(...)`. */
+type Variables = { userId: string; level: Level };
+
+export type AppDependencies = {
+  auth: AuthDependencies;
+  /** Client-safe levels, in play order. */
+  levels: readonly Level[];
+  game: GameDependencies;
+};
 
 /**
- * The HTTP routes. Everything that needs Node (files, child processes) is
- * passed in, so the web app can import `AppType` without pulling in Node types.
+ * The HTTP routes. Everything that needs Node (files, child processes, the
+ * database) is passed in, so the web app can import `AppType` without pulling
+ * in Node types.
  */
-export function createApp({ levels, runQuery, judge }: AppDependencies) {
-  const findLevel = (number: string) =>
-    levels.find((candidate) => String(candidate.number) === number);
-
-  const app = new Hono()
+export function createApp({ auth, levels, game }: AppDependencies) {
+  const app = new Hono<{ Variables: Variables }>()
     .basePath("/api")
-    .get("/levels/:number", (c) => {
-      const level = findLevel(c.req.param("number"));
+    // Better Auth answers everything under /api/auth itself.
+    .on(["GET", "POST"], "/auth/*", (c) => auth.handler(c.req.raw))
+    // Every game route needs a player. The browser signs in anonymously before
+    // its first call, so a request without a session is a bug or a stranger.
+    .use("/levels/*", async (c, next) => {
+      const userId = await auth.getUserId(c.req.raw.headers);
+      if (!userId) {
+        return c.json({ error: "No session. Reload the page to start one." }, 401);
+      }
+      c.set("userId", userId);
+      await next();
+    })
+    // ...and every one of them is about one level.
+    .use("/levels/:number/*", async (c, next) => {
+      const level = levels.find((candidate) => String(candidate.number) === c.req.param("number"));
       if (!level) {
         return c.json({ error: "No such level." }, 404);
       }
-      return c.json(level, 200);
+      c.set("level", level);
+      await next();
     })
-    .post("/levels/:number/queries", zValidator("json", queryRequestSchema), async (c) => {
-      const level = findLevel(c.req.param("number"));
+    .get("/levels/:number", async (c) => {
+      const level = levels.find((candidate) => String(candidate.number) === c.req.param("number"));
       if (!level) {
         return c.json({ error: "No such level." }, 404);
       }
-      const result = await runQuery(level, c.req.valid("json").input);
-      return c.json(result, 200);
+      return c.json({ level, progress: await game.getProgress(c.get("userId"), level) }, 200);
     })
-    .post(
-      "/levels/:number/submissions",
-      zValidator("json", submissionRequestSchema),
-      async (c) => {
-        const level = findLevel(c.req.param("number"));
-        if (!level) {
-          return c.json({ error: "No such level." }, 404);
-        }
-        if (!judge) {
-          return c.json({ error: JUDGE_OFF }, 503);
-        }
-        try {
-          return c.json(await judge.submit(level, c.req.valid("json")), 200);
-        } catch (error) {
-          // Judge0 being down or unreachable is not the player's fault, and
-          // must not be counted as a verdict.
-          console.error(error);
-          return c.json({ error: JUDGE_UNREACHABLE }, 503);
-        }
-      },
+    .post("/levels/:number/queries", zValidator("json", queryRequestSchema), async (c) =>
+      c.json(await game.query(c.get("userId"), c.get("level"), c.req.valid("json").input), 200),
     )
-    .post("/levels/:number/runs", zValidator("json", runRequestSchema), async (c) => {
-      const level = findLevel(c.req.param("number"));
-      if (!level) {
-        return c.json({ error: "No such level." }, 404);
-      }
-      if (!judge) {
-        return c.json({ error: JUDGE_OFF }, 503);
-      }
-      try {
-        return c.json(await judge.run(level, c.req.valid("json")), 200);
-      } catch (error) {
-        console.error(error);
-        return c.json({ error: JUDGE_UNREACHABLE }, 503);
-      }
-    });
+    .post("/levels/:number/submissions", zValidator("json", submissionRequestSchema), async (c) =>
+      c.json(await game.submit(c.get("userId"), c.get("level"), c.req.valid("json")), 200),
+    )
+    .post("/levels/:number/runs", zValidator("json", runRequestSchema), async (c) =>
+      c.json(await game.run(c.get("userId"), c.get("level"), c.req.valid("json")), 200),
+    );
 
   app.onError((error, c) => {
-    // The details go to the log, never to the player.
+    // Problems the player should hear about carry their own status and message.
+    if (error instanceof GameError) {
+      return c.json({ error: error.message }, error.status);
+    }
+    // Anything else: the details go to the log, never to the player.
     console.error(error);
     return c.json({ error: "Something went wrong on the server." }, 500);
   });

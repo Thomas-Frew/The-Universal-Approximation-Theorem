@@ -1,13 +1,12 @@
-import type { Level } from "@uat/shared";
 import { useEffect, useState } from "react";
-import { fetchLevel } from "./api";
+import { fetchLevel, type LevelResponse } from "./api";
 
 export type LevelState =
   | { status: "loading" }
-  | { status: "ready"; level: Level }
+  | ({ status: "ready" } & LevelResponse)
   | { status: "error"; message: string };
 
-/** Fetches a level by its position in play order. */
+/** Fetches a level by its position in play order, with the player's progress on it. */
 export function useLevel(number: number): LevelState {
   const [state, setState] = useState<LevelState>({ status: "loading" });
 
@@ -16,8 +15,8 @@ export function useLevel(number: number): LevelState {
     let cancelled = false;
     setState({ status: "loading" });
     fetchLevel(number).then(
-      (level) => {
-        if (!cancelled) setState({ status: "ready", level });
+      (response) => {
+        if (!cancelled) setState({ status: "ready", ...response });
       },
       (error: unknown) => {
         if (!cancelled) {
