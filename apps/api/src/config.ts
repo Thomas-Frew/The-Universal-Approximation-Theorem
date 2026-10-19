@@ -42,6 +42,8 @@ export function readConfig() {
     databaseUrl,
     authSecret,
     authUrl,
+    /** The built web app (apps/web/dist) to serve, in production. Unset locally, where Vite serves it. */
+    webDir: process.env.WEB_DIR ? resolve(process.env.WEB_DIR) : null,
     /** Where Judge0 is. Without it the API runs, but cannot judge submissions. */
     judge0Url: process.env.JUDGE0_URL?.replace(/\/+$/, "") || null,
     /**
