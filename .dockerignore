@@ -1,0 +1,10 @@
+# This repo is the build context for the Dockerfile. Keep out anything
+# local, secret or rebuilt in the image.
+**/node_modules
+**/dist
+**/.cache
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.claude

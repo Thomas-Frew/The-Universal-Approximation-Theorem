@@ -1,0 +1,6 @@
+{
+  "penalty": {
+    "query": 1,
+    "wrongSubmission": 5
+  }
+}

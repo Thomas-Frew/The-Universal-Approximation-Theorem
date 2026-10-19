@@ -81,7 +81,7 @@
      repaint the photo on every frame of a scroll; a fixed layer is painted
      once and left alone. */
   body::before {
-    --paper-wash: color-mix(in srgb, var(--color-paper) 95%, transparent);
+    --paper-wash: color-mix(in srgb, var(--color-paper) 90%, transparent);
     content: "";
     position: fixed;
     inset: 0;
@@ -182,4 +182,112 @@
 .cm-editor .tok-string,
 .cm-editor .tok-number {
   color: color-mix(in srgb, var(--color-sage) 55%, var(--color-ink));
+}
+
+/* Drawing the title. On the title screen the brass rules draw outward, "The"
+   fades in, then each line of the title is traced in outline by a sweeping
+   pen and filled with ink. `--delay` (set per element) staggers the steps.
+   Everything sits inside this media query, so with reduced motion the classes
+   do nothing and the title is simply there. */
+@media (prefers-reduced-motion: no-preference) {
+  .draw-rule {
+    animation: draw-rule 900ms var(--ease-screen) var(--delay, 100ms) both;
+  }
+
+  .draw-fade {
+    animation: draw-fade 800ms ease-out var(--delay, 0ms) both;
+  }
+
+  .draw-ink {
+    -webkit-text-stroke: 1.5px var(--color-ink);
+    /* A soft-edged mask, wider than the text, slid from right to left: the
+       text appears from left to right behind a feathered edge, like a pen
+       moving across the page. Only the mask's alpha matters, not its colour. */
+    mask-image: linear-gradient(90deg, #000 40%, transparent 60%);
+    mask-size: 250% 100%;
+    mask-repeat: no-repeat;
+    animation:
+      draw-sweep 1300ms cubic-bezier(0.45, 0, 0.25, 1) var(--delay, 0ms) both,
+      draw-fill 800ms ease-in-out calc(var(--delay, 0ms) + 1100ms) both;
+  }
+}
+
+@keyframes draw-rule {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes draw-fade {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+@keyframes draw-sweep {
+  from {
+    mask-position: 100% 0;
+  }
+  to {
+    mask-position: 0 0;
+  }
+}
+
+/* Outline first (no fill, ink stroke), then the ink floods in and the stroke
+   goes, leaving the plain bold letters. */
+@keyframes draw-fill {
+  from {
+    color: transparent;
+    -webkit-text-stroke-color: var(--color-ink);
+  }
+  to {
+    color: var(--color-ink);
+    -webkit-text-stroke-color: transparent;
+  }
+}
+
+/* Solving a level. The demo's completion panel draws itself in: a brass seal
+   (two rings, then a tick, traced like a pen stroke), the ornament, then the
+   words rising into place. Outside the demo, the Solved badge pops in. Like
+   the title, all of it is skipped under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  /* For SVG shapes with pathLength="1": the dash is the whole outline, and
+     sliding its offset from 1 to 0 draws it from start to end. */
+  .draw-stroke {
+    stroke-dasharray: 1;
+    animation: draw-stroke var(--duration, 800ms) cubic-bezier(0.45, 0, 0.25, 1)
+      var(--delay, 0ms) both;
+  }
+
+  .draw-rise {
+    animation: draw-rise 700ms cubic-bezier(0.2, 0.7, 0.2, 1) var(--delay, 0ms) both;
+  }
+
+  .badge-pop {
+    animation: badge-pop 600ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
+  }
+}
+
+@keyframes draw-stroke {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes draw-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes badge-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
 }

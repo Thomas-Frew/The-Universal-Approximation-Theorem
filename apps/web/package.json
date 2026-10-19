@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "sounds": "python3 scripts/prepare-sounds.py"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
@@ -19,10 +20,15 @@
     "@fontsource-variable/fraunces": "^5.3.0",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@lezer/highlight": "^1.2.5",
+    "@uat/api": "workspace:*",
     "@uat/shared": "workspace:*",
+    "better-auth": "^1.7.11",
     "codemirror": "^6.0.2",
+    "hono": "^4.13.13",
+    "katex": "^0.19.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

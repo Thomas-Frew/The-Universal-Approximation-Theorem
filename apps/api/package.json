@@ -1,0 +1,36 @@
+{
+  "name": "@uat/api",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/app.ts"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch src/index.ts",
+    "tunnel": "node --env-file-if-exists=.env scripts/tunnel.ts",
+    "verify": "node --env-file-if-exists=.env src/verify.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:reset": "node --env-file-if-exists=.env scripts/reset-db.ts",
+    "db:auth-schema": "auth generate --config better-auth.config.ts --output src/db/auth-schema.ts --yes",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.4",
+    "@hono/zod-validator": "^0.9.1",
+    "@uat/shared": "workspace:*",
+    "better-auth": "^1.7.11",
+    "drizzle-orm": "^0.45.4",
+    "fflate": "^0.8.3",
+    "hono": "^4.13.13",
+    "postgres": "^3.4.9",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "auth": "1.7.11",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "^7.0.2"
+  }
+}
