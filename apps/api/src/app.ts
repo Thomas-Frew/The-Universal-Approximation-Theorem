@@ -42,8 +42,10 @@ type Variables = { userId: string; level: Level };
 
 export type AppDependencies = {
   auth: AuthDependencies;
-  /** Client-safe levels, in play order. */
+  /** Client-safe levels, in play order. In demo mode, only the first. */
   levels: readonly Level[];
+  /** Whether this is the public demo; passed on to the browser with each level. */
+  demo: boolean;
   game: GameDependencies;
 };
 
@@ -52,7 +54,7 @@ export type AppDependencies = {
  * database) is passed in, so the web app can import `AppType` without pulling
  * in Node types.
  */
-export function createApp({ auth, levels, game }: AppDependencies) {
+export function createApp({ auth, levels, demo, game }: AppDependencies) {
   const app = new Hono<{ Variables: Variables }>()
     .basePath("/api")
     // Better Auth answers everything under /api/auth itself.
@@ -81,7 +83,8 @@ export function createApp({ auth, levels, game }: AppDependencies) {
       if (!level) {
         return c.json({ error: "No such level." }, 404);
       }
-      return c.json({ level, progress: await game.getProgress(c.get("userId"), level) }, 200);
+      const progress = await game.getProgress(c.get("userId"), level);
+      return c.json({ level, progress, demo }, 200);
     })
     .post("/levels/:number/queries", zValidator("json", queryRequestSchema), async (c) =>
       c.json(await game.query(c.get("userId"), c.get("level"), c.req.valid("json").input), 200),

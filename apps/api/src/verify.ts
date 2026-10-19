@@ -1,7 +1,14 @@
 import { join } from "node:path";
 import { normaliseText, outputsMatch } from "@uat/shared";
-import { readConfig } from "./config.ts";
-import { type Case, type LoadedLevel, listFiles, loadCases, loadLevels } from "./levels.ts";
+import { readLevelsConfig } from "./config.ts";
+import {
+  type Case,
+  type LoadedLevel,
+  listFiles,
+  loadCases,
+  loadLevels,
+  readManifest,
+} from "./levels.ts";
 import { prepare, run } from "./programs.ts";
 
 /**
@@ -11,6 +18,8 @@ import { prepare, run } from "./programs.ts";
  */
 
 const VALIDATOR_TIMEOUT_MS = 5_000;
+/** Enough hidden cases that a solution cannot pass by luck or by special cases. */
+const MIN_SECRET_CASES = 20;
 
 /** Returns what is wrong with the level, one line per problem. Empty means it passed. */
 async function verifyLevel(loaded: LoadedLevel, cacheDir: string): Promise<string[]> {
@@ -18,7 +27,9 @@ async function verifyLevel(loaded: LoadedLevel, cacheDir: string): Promise<strin
   const samples = await loadCases(join(loaded.dir, "data", "sample"));
   const secrets = await loadCases(join(loaded.dir, "data", "secret"));
   if (samples.length === 0) problems.push("data/sample has no cases");
-  if (secrets.length === 0) problems.push("data/secret has no cases");
+  if (secrets.length < MIN_SECRET_CASES) {
+    problems.push(`data/secret has ${secrets.length} cases; at least ${MIN_SECRET_CASES} are needed`);
+  }
 
   const cases: [string, Case][] = [
     ...samples.map((c): [string, Case] => [`sample/${c.name}`, c]),
@@ -76,10 +87,13 @@ async function verifyLevel(loaded: LoadedLevel, cacheDir: string): Promise<strin
   return problems;
 }
 
-const { levelsDir, cacheDir } = readConfig();
+const { levelsDir, cacheDir } = readLevelsConfig();
 // Loading already checks problem.yaml, the statements, the single accepted
 // file, unique uuids, and that the validator and machine compile.
-const levels = await loadLevels(levelsDir, cacheDir);
+// Every level that can be played: the main list, plus the demo if it sits outside it.
+const manifest = await readManifest(levelsDir);
+const slugs = [...new Set([...manifest.levels, ...(manifest.demo ? [manifest.demo] : [])])];
+const levels = await loadLevels(levelsDir, cacheDir, slugs);
 
 let failed = false;
 for (const loaded of levels) {

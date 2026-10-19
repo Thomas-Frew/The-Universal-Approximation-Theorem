@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type Level,
+  type LevelsManifest,
   levelsManifestSchema,
   type Observation,
   problemConfigSchema,
@@ -71,7 +72,7 @@ async function loadLevel(
   slug: string,
   number: number,
 ): Promise<LoadedLevel> {
-  const dir = join(levelsDir, slug);
+  const dir = join(levelsDir, "levels", slug);
   const config = problemConfigSchema.parse(
     parseYaml(await read(join(dir, "problem.yaml"))),
   );
@@ -108,18 +109,23 @@ async function loadLevel(
   };
 }
 
-/**
- * Loads every level listed in `levels.yaml`, in play order, compiling its
- * validator and machine. Throws on the first level that does not match the
- * expected layout.
- */
-export async function loadLevels(levelsDir: string, cacheDir: string): Promise<LoadedLevel[]> {
-  const manifest = levelsManifestSchema.parse(
-    parseYaml(await read(join(levelsDir, "levels.yaml"))),
-  );
+/** Reads `levels.yaml`: the play order, and which level is the demo. */
+export async function readManifest(levelsDir: string): Promise<LevelsManifest> {
+  return levelsManifestSchema.parse(parseYaml(await read(join(levelsDir, "levels.yaml"))));
+}
 
+/**
+ * Loads the given level folders, numbered 1, 2, ... in that order, compiling
+ * each validator and machine. Throws on the first level that does not match
+ * the expected layout.
+ */
+export async function loadLevels(
+  levelsDir: string,
+  cacheDir: string,
+  slugs: readonly string[],
+): Promise<LoadedLevel[]> {
   const levels = await Promise.all(
-    manifest.levels.map((slug, index) =>
+    slugs.map((slug, index) =>
       loadLevel(levelsDir, cacheDir, slug, index + 1).catch((cause: unknown) => {
         throw new Error(`Could not load level "${slug}"`, { cause });
       }),
@@ -128,7 +134,7 @@ export async function loadLevels(levelsDir: string, cacheDir: string): Promise<L
 
   const ids = new Set(levels.map(({ level }) => level.id));
   if (ids.size !== levels.length) {
-    throw new Error("Two levels in levels.yaml share a uuid");
+    throw new Error("Two levels share a uuid");
   }
   return levels;
 }

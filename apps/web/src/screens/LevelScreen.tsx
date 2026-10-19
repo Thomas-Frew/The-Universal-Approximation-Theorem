@@ -1,5 +1,6 @@
 import { type Level, penaltyOf, type Progress } from "@uat/shared";
 import { useState } from "react";
+import { DemoComplete } from "../components/DemoComplete";
 import { HypothesisPanel } from "../components/HypothesisPanel";
 import { Label } from "../components/Label";
 import { ObservationPanel } from "../components/ObservationPanel";
@@ -10,6 +11,8 @@ type LevelScreenProps = {
   level: Level;
   /** The player's progress when the level was fetched. */
   initialProgress: Progress;
+  /** The public demo: solving this level ends it, so the editor gives way to a message. */
+  demo: boolean;
   onExit: () => void;
 };
 
@@ -50,7 +53,7 @@ function FormatCard({ title, body }: { title: string; body: string }) {
 }
 
 /** The level page: query the machine, then submit code that reproduces it. */
-export function LevelScreen({ level, initialProgress, onExit }: LevelScreenProps) {
+export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScreenProps) {
   // The server's word on where the player stands. Every query and submission
   // answers with a fresh copy, which simply replaces this one.
   const [progress, setProgress] = useState(initialProgress);
@@ -92,7 +95,11 @@ export function LevelScreen({ level, initialProgress, onExit }: LevelScreenProps
           />
         </div>
 
-        <HypothesisPanel levelNumber={level.number} onProgress={setProgress} />
+        {demo && progress.status === "solved" ? (
+          <DemoComplete levelTitle={level.title} penalty={penalty} />
+        ) : (
+          <HypothesisPanel levelNumber={level.number} onProgress={setProgress} />
+        )}
       </div>
     </main>
   );

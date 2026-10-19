@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Folder name of a level in the levels repo, e.g. `duplicator`. */
+/** Folder name of a level, under `levels/` in the levels repo, e.g. `duplicator`. */
 export const levelSlugSchema = z
   .string()
   .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Use lowercase letters, digits and hyphens");
@@ -11,6 +11,11 @@ export const levelSlugSchema = z
  */
 export const levelsManifestSchema = z.object({
   levels: z.array(levelSlugSchema).min(1),
+  /**
+   * The level the public demo (DEMO_MODE) consists of. It does not have to be
+   * one of `levels`: a demo-only level can sit outside the main game.
+   */
+  demo: levelSlugSchema.optional(),
 });
 export type LevelsManifest = z.infer<typeof levelsManifestSchema>;
 

@@ -40,7 +40,12 @@ export function App() {
   }
   if (level.status === "ready") {
     return (
-      <LevelScreen level={level.level} initialProgress={level.progress} onExit={showIntro} />
+      <LevelScreen
+        level={level.level}
+        initialProgress={level.progress}
+        demo={level.demo}
+        onExit={showIntro}
+      />
     );
   }
   return (
