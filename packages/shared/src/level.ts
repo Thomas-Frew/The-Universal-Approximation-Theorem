@@ -37,6 +37,8 @@ export const problemConfigSchema = z.object({
   concept_diff: z.number().int().min(1).max(10),
   /** 1 to 10: how hard the solution is to code once the logic is known. */
   implement_diff: z.number().int().min(1).max(10),
+  /** One plain-text sentence saying what the machine does. Secret, like `concepts`. */
+  solution: z.string().min(1),
   limits: z
     .object({
       /** Seconds. */

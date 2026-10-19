@@ -3,7 +3,7 @@ import {
   type Level,
   type LogEntry,
   MAX_RUN_OBSERVATIONS,
-  normaliseText,
+  normaliseInput,
   type Progress,
   type QueryResult,
   type RunResult,
@@ -138,7 +138,7 @@ export function createGame({
 
   async function query(userId: string, level: Level, rawInput: string) {
     const loaded = find(level);
-    const input = normaliseText(rawInput);
+    const input = normaliseInput(rawInput);
     const inputHash = hashInput(input);
 
     const result = await answerFor(loaded, input, inputHash);

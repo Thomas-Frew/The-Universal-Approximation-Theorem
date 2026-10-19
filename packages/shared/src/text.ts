@@ -1,10 +1,7 @@
 /**
- * The one canonical form for machine input and output text: CRLF becomes LF,
- * trailing whitespace is stripped from each line, and the text ends with
- * exactly one newline.
- *
- * Query input is put in this form before it is validated or cached, so a
- * player is never rejected for an invisible character.
+ * The canonical form of a text's lines: CRLF becomes LF, trailing whitespace
+ * is stripped from each line, and the text ends with exactly one newline.
+ * Used for outputs; inputs go through the stricter `normaliseInput`.
  */
 export function normaliseText(raw: string): string {
   const lines = raw
@@ -15,6 +12,28 @@ export function normaliseText(raw: string): string {
     lines.pop();
   }
   return `${lines.join("\n")}\n`;
+}
+
+/**
+ * The canonical form of a query input, so a player is never rejected for a
+ * character they cannot see. On top of `normaliseText`, within each line every
+ * run of spaces, tabs and other blank characters (such as the no-break space
+ * macOS types for Option+Space) becomes a single space, and leading blanks go.
+ * Line breaks are kept: they are visible, and can be part of a level's format.
+ *
+ * This assumes no level gives meaning to repeated or leading spaces within a
+ * line. A level that needs that will need its own rule here.
+ */
+export function normaliseInput(raw: string): string {
+  return normaliseText(
+    raw
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      // `\s` includes the no-break space and other Unicode blanks; `[^\S\n]`
+      // is "any blank except a line break".
+      .map((line) => line.replace(/[^\S\n]+/g, " ").trim())
+      .join("\n"),
+  );
 }
 
 /** A plain decimal number: `90`, `-7.5`, `.5`, `1e-3`. Not `inf`, `nan` or `0x1F`. */

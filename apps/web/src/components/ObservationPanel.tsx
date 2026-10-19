@@ -1,7 +1,7 @@
 import {
   type Level,
   type LogEntry,
-  normaliseText,
+  normaliseInput,
   PENALTY_COSTS,
   type Progress,
 } from "@uat/shared";
@@ -36,7 +36,7 @@ export function ObservationPanel({ level, log, onProgress }: ObservationPanelPro
     if (pending || input.trim() === "") return;
 
     // The log holds inputs in normalised form, so compare like with like.
-    const normalised = normaliseText(input);
+    const normalised = normaliseInput(input);
     if (rows.some((row) => row.observation.input === normalised)) {
       setNotice({ tone: "info", text: "That input is already in your log." });
       return;
@@ -86,10 +86,20 @@ export function ObservationPanel({ level, log, onProgress }: ObservationPanelPro
       <form onSubmit={onSubmit} className="mt-4 flex items-start gap-4">
         <textarea
           value={input}
-          onChange={(event) => setInput(event.target.value)}
+          onChange={(event) => {
+            setInput(event.target.value);
+            // A message is about the input that was sent; once it is edited,
+            // the message no longer describes what is in the box.
+            setNotice(null);
+          }}
           onKeyDown={onKeyDown}
           rows={1}
           spellCheck={false}
+          // Writing-assistant extensions (Grammarly and the like) have no
+          // business in a machine's input.
+          data-gramm="false"
+          data-gramm_editor="false"
+          data-enable-grammarly="false"
           aria-label="Query input"
           placeholder="Input for the machine"
           className="min-h-12 flex-1 resize-y rounded-md border border-stone bg-paper p-3 font-mono text-sm outline-offset-2 outline-walnut placeholder:text-taupe focus-visible:outline-2"

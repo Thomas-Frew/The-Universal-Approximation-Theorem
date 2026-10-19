@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { normaliseText, outputsMatch } from "@uat/shared";
+import { normaliseInput, outputsMatch } from "@uat/shared";
 import { readLevelsConfig } from "./config.ts";
 import {
   type Case,
@@ -38,8 +38,10 @@ async function verifyLevel(loaded: LoadedLevel, cacheDir: string): Promise<strin
 
   for (const [label, { input, output }] of cases) {
     // A test input must already be in the form a typed query is normalised to.
-    if (normaliseText(input) !== input) {
-      problems.push(`${label}.in has trailing whitespace, CRLF, or no single final newline`);
+    if (normaliseInput(input) !== input) {
+      problems.push(
+        `${label}.in is not in the form a typed query becomes: no repeated, leading or trailing blanks, LF line ends, one final newline`,
+      );
     }
 
     const validation = await run(loaded.validator, input, VALIDATOR_TIMEOUT_MS);
