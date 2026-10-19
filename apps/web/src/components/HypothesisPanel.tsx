@@ -7,6 +7,7 @@ import {
 } from "@uat/shared";
 import { useState } from "react";
 import { runCode, submitCode } from "../lib/api";
+import { playSound } from "../lib/sound";
 import { LANGUAGE_NAMES, STARTER_CODE } from "../lib/starterCode";
 import { CodeEditor } from "./CodeEditor";
 import { Label } from "./Label";
@@ -60,6 +61,11 @@ function CloseButton({ onClick }: { onClick: () => void }) {
     </button>
   );
 }
+
+/** Quiet between the end of the "unknown" sound and the verdict. */
+const VERDICT_PAUSE_MS = 500;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function describe(result: SubmissionResult): Status {
   switch (result.status) {
@@ -132,28 +138,52 @@ export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProp
         };
   };
 
-  const submit = () =>
-    withJudge("submit", async () => {
+  const submit = () => {
+    if (busy) return;
+    // The suspense: "unknown" plays while the judge works, and the verdict is
+    // held back until it has finished and half a second of quiet has passed.
+    // (If another sound cuts it off, the wait ends then.) Started here, inside
+    // the click, which is also what lets the browser play sound at all.
+    const suspense = playSound("unknown").then(() => sleep(VERDICT_PAUSE_MS));
+
+    return withJudge("submit", async () => {
       const code = drafts[language];
-      const { verdict, progress } = await submitCode(levelNumber, language, code);
-      onProgress(progress);
-      const status = describe(verdict);
-      if (!("revealed" in verdict)) return status;
+      let verdict: SubmissionResult;
+      let progress: Progress;
+      try {
+        ({ verdict, progress } = await submitCode(levelNumber, language, code));
+      } catch (error) {
+        await suspense;
+        throw error;
+      }
 
       // A wrong submission has just added the failing case to the log, so a
       // Run against the log now shows where the code differs, that case
       // included. Only the one revealed hidden case is involved: the program's
-      // output on the other hidden tests is never shown.
-      try {
-        const { mismatches } = await checkAgainstLog(code);
-        return { ...status, mismatches };
-      } catch {
-        // The verdict stands even if the follow-up Run cannot reach the judge.
-        return status;
-      }
-    });
+      // output on the other hidden tests is never shown. It runs during the
+      // suspense, so it rarely adds any wait of its own.
+      const differences =
+        "revealed" in verdict
+          ? checkAgainstLog(code).then(
+              (result) => result.mismatches,
+              // The verdict stands even if the follow-up Run cannot reach the judge.
+              () => undefined,
+            )
+          : Promise.resolve(undefined);
+      const [mismatches] = await Promise.all([differences, suspense]);
 
-  const run = () => withJudge("run", () => checkAgainstLog(drafts[language]));
+      void playSound(verdict.status === "accepted" ? "correct" : "wrong");
+      onProgress(progress);
+      return { ...describe(verdict), ...(mismatches && { mismatches }) };
+    });
+  };
+
+  const run = () =>
+    withJudge("run", async () => {
+      const status = await checkAgainstLog(drafts[language]);
+      void playSound("query");
+      return status;
+    });
 
   return (
     // Content only: the frame around it belongs to the level screen, so it

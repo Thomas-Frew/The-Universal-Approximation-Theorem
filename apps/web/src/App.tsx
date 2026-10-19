@@ -1,6 +1,7 @@
-import { useCallback, useLayoutEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import { prefersReducedMotion } from "./lib/motion";
+import { preloadSounds } from "./lib/sound";
 import { useLevel } from "./lib/useLevel";
 import { IntroScreen } from "./screens/IntroScreen";
 import { LevelScreen } from "./screens/LevelScreen";
@@ -14,6 +15,8 @@ export function App() {
   // Asked for on first render, so level 1 has usually arrived by the time the
   // player has read the intro.
   const level = useLevel(1);
+
+  useEffect(preloadSounds, []);
 
   // Each screen starts at the top, without the smooth-scroll animation.
   useLayoutEffect(() => {

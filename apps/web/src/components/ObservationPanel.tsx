@@ -7,6 +7,7 @@ import {
 } from "@uat/shared";
 import { type FormEvent, type KeyboardEvent, useState } from "react";
 import { sendQuery } from "../lib/api";
+import { playSound } from "../lib/sound";
 import { Label } from "./Label";
 
 type ObservationPanelProps = {
@@ -49,6 +50,7 @@ export function ObservationPanel({ level, log, onProgress }: ObservationPanelPro
       if (result.status === "rejected") {
         setNotice({ tone: "error", text: `Rejected. ${result.message}` });
       } else {
+        void playSound("query");
         onProgress(progress);
         setInput("");
       }
@@ -80,7 +82,7 @@ export function ObservationPanel({ level, log, onProgress }: ObservationPanelPro
     <section className="flex-1 rounded-md border border-stone bg-vellum p-6">
       <h2 className="text-xl italic">Observations</h2>
       <p className="mt-1 text-sm text-taupe">
-        The samples are free. Each new query costs {PENALTY_COSTS.query}.
+        The samples are free. Each additional query costs {PENALTY_COSTS.query}.
       </p>
 
       <form onSubmit={onSubmit} className="mt-4 flex items-start gap-4">
@@ -102,7 +104,7 @@ export function ObservationPanel({ level, log, onProgress }: ObservationPanelPro
           data-enable-grammarly="false"
           aria-label="Query input"
           placeholder="Input for the machine"
-          className="min-h-12 flex-1 resize-y rounded-md border border-stone bg-paper p-3 font-mono text-sm outline-offset-2 outline-walnut placeholder:text-taupe focus-visible:outline-2"
+          className="min-h-12 flex-1 resize-none rounded-md border border-stone bg-paper p-3 font-mono text-sm outline-offset-2 outline-walnut placeholder:text-taupe focus-visible:outline-2"
         />
         <button
           type="submit"

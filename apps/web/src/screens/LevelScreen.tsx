@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { DemoComplete } from "../components/DemoComplete";
 import { HypothesisPanel } from "../components/HypothesisPanel";
 import { Label } from "../components/Label";
+import { MuteButton } from "../components/MuteButton";
 import { ObservationPanel } from "../components/ObservationPanel";
 import { Tex } from "../components/Tex";
 import { resetProgress } from "../lib/api";
@@ -34,7 +35,10 @@ function StatusBadge({ status, celebrate }: { status: Progress["status"]; celebr
     <span
       // A new key per status remounts the badge, so its flourish plays on change.
       key={status}
-      className={`rounded-full border px-3 py-1 text-xs tracking-label uppercase ${badge.className} ${celebrate ? "badge-pop" : ""}`}
+      // Centring on the heading's line box sits it high, since that box keeps
+      // room below for descenders; top-1 lowers it onto the middle of the
+      // lowercase letters, where the eye reads the title's centre.
+      className={`relative top-1 rounded-full border px-3 py-1 text-xs tracking-label uppercase ${badge.className} ${celebrate ? "badge-pop" : ""}`}
     >
       {badge.text}
     </span>
@@ -108,6 +112,7 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
           <Counter label="Queries" value={queries} />
           <Counter label="Wrong answers" value={wrongSubmissions} />
           <Counter label="Penalty" value={penalty} />
+          <MuteButton />
           <button
             type="button"
             onClick={onExit}
