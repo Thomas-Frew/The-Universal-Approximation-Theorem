@@ -21,7 +21,10 @@ export function TitleScreen({ ref, onNext }: TitleScreenProps) {
           </span>
           <span className="draw-rule h-px w-[13vw] origin-left bg-brass" />
         </span>
-        <span className="mt-4 block font-title text-[clamp(2.25rem,5vw,6.5rem)] leading-[1.15] font-bold uppercase">
+        {/* 5vw on wide screens; on narrow ones 12vw, which makes the longest
+            line, "APPROXIMATION", fill most of a phone's width. Never below 3rem
+            until 12vw is smaller, never above 6.5rem. */}
+        <span className="mt-4 block font-title text-[min(12vw,max(3rem,5vw),6.5rem)] leading-[1.15] font-bold uppercase">
           <span className="draw-ink block [--delay:800ms]">Universal Approximation</span>
           <span className="draw-ink block [--delay:1400ms]">Theorem</span>
         </span>

@@ -38,7 +38,7 @@ function StatusBadge({ status, celebrate }: { status: Progress["status"]; celebr
       // Centring on the heading's line box sits it high, since that box keeps
       // room below for descenders; top-1 lowers it onto the middle of the
       // lowercase letters, where the eye reads the title's centre.
-      className={`relative top-1 rounded-full border px-3 py-1 text-xs tracking-label uppercase ${badge.className} ${celebrate ? "badge-pop" : ""}`}
+      className={`relative top-1 shrink-0 rounded-full border whitespace-nowrap px-3 py-1 text-xs tracking-label uppercase ${badge.className} ${celebrate ? "badge-pop" : ""}`}
     >
       {badge.text}
     </span>
@@ -47,7 +47,7 @@ function StatusBadge({ status, celebrate }: { status: Progress["status"]; celebr
 
 function Counter({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex flex-col items-end">
+    <div className="flex flex-col items-end whitespace-nowrap">
       <Label>{label}</Label>
       <span className="font-mono text-2xl">{value}</span>
     </div>
@@ -100,15 +100,17 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
 
   return (
     <main className="mx-auto min-h-dvh max-w-[min(104rem,94vw)] py-10 [view-transition-name:level]">
-      <header className="flex items-end justify-between border-b border-stone pb-4">
+      {/* On a narrow screen the counters wrap below the title rather than
+          squeezing it; the badge and labels never break mid-phrase. */}
+      <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 border-b border-stone pb-4">
         <div>
           <Label>Machine {toRoman(level.number)}</Label>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <h1 className="text-4xl font-bold">{level.title}</h1>
             <StatusBadge status={progress.status} celebrate={justSolved} />
           </div>
         </div>
-        <div className="flex items-end gap-8">
+        <div className="flex flex-wrap items-end gap-5 sm:gap-8">
           <Counter label="Queries" value={queries} />
           <Counter label="Wrong answers" value={wrongSubmissions} />
           <Counter label="Penalty" value={penalty} />
