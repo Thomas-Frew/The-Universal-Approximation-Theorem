@@ -1,5 +1,5 @@
-# Used when this repo is a build context (see the Dockerfile in the levels
-# repo). Keep out anything local, secret or rebuilt in the image.
+# This repo is the build context for the Dockerfile. Keep out anything
+# local, secret or rebuilt in the image.
 **/node_modules
 **/dist
 **/.cache
