@@ -42,6 +42,19 @@ export function IntroScreen({ onStart, demo }: IntroScreenProps) {
   // Leaving the intro mid-slide must not leave the animation running.
   useEffect(() => () => stopSlide.current(), []);
 
+  // The page does not scroll by itself during the intro: no swiping or
+  // dragging between screens, which on phones fought the slide and the snap
+  // points and left the page stuck between screens. The keys, buttons and
+  // wheel still move it, because scrolling from code works regardless.
+  // The about page's text scrolls on its own if it is too tall (AboutScreen).
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.overflow = "hidden";
+    return () => {
+      root.style.overflow = "";
+    };
+  }, []);
+
   useEffect(() => {
     const isOnAbout = () => {
       const about = aboutRef.current;

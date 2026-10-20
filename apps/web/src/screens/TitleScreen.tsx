@@ -10,7 +10,7 @@ export function TitleScreen({ ref, onNext }: TitleScreenProps) {
   return (
     <section
       ref={ref}
-      className="relative flex min-h-dvh snap-start flex-col items-center justify-center px-8 text-center"
+      className="relative flex min-h-dvh snap-start flex-col items-center justify-center px-6 text-center sm:px-8"
     >
       <h1>
         <span className="flex items-center justify-center gap-6">
@@ -21,12 +21,19 @@ export function TitleScreen({ ref, onNext }: TitleScreenProps) {
           </span>
           <span className="draw-rule h-px w-[13vw] origin-left bg-brass" />
         </span>
-        {/* 5vw on wide screens; on narrow ones 12vw, which makes the longest
-            line, "APPROXIMATION", fill most of a phone's width. Never below 3rem
-            until 12vw is smaller, never above 6.5rem. */}
-        <span className="mt-4 block font-title text-[min(12vw,max(3rem,5vw),6.5rem)] leading-[1.15] font-bold uppercase">
-          <span className="draw-ink block [--delay:800ms]">Universal Approximation</span>
-          <span className="draw-ink block [--delay:1400ms]">Theorem</span>
+        {/* 5vw on wide screens; on narrow ones 9vw, which makes the longest
+            line, "APPROXIMATION" (about 9em wide in bold capitals), fill most
+            of a phone's width with a margin to spare. Never below 3rem until
+            9vw is smaller, never above 6.5rem. */}
+        <span className="mt-4 block font-title text-[min(9vw,max(3rem,5vw),6.5rem)] leading-[1.15] font-bold uppercase">
+          {/* Each word is drawn on its own, a quarter second after the last.
+              They are inline blocks, so the first two still share a line where
+              there is room and wrap apart where there is not. */}
+          <span className="block">
+            <span className="draw-ink inline-block [--delay:800ms]">Universal</span>{" "}
+            <span className="draw-ink inline-block [--delay:1050ms]">Approximation</span>
+          </span>
+          <span className="draw-ink inline-block [--delay:1300ms]">Theorem</span>
         </span>
       </h1>
 

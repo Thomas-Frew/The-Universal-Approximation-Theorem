@@ -47,8 +47,9 @@ function StatusBadge({ status, celebrate }: { status: Progress["status"]; celebr
 
 function Counter({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex flex-col items-end whitespace-nowrap">
-      <Label>{label}</Label>
+    <div className="flex flex-col items-start whitespace-nowrap lg:items-end">
+      {/* Tighter letter-spacing on phones, so all three fit on one line. */}
+      <Label className="tracking-[0.1em] sm:tracking-label">{label}</Label>
       <span className="font-mono text-2xl">{value}</span>
     </div>
   );
@@ -100,20 +101,30 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
 
   return (
     <main className="mx-auto min-h-dvh max-w-[min(104rem,94vw)] py-10 [view-transition-name:level]">
-      {/* On a narrow screen the counters wrap below the title rather than
-          squeezing it; the badge and labels never break mid-phrase. */}
-      <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 border-b border-stone pb-4">
-        <div>
+      {/* Placed on a grid, so one header serves both layouts:
+
+            phone and tablet           wide (lg)
+            MACHINE I    [🔈][MENU]    MACHINE I       QUERIES … PENALTY  [🔈][MENU]
+            The Mainspring (badge)     The Mainspring   0         0
+            QUERIES … PENALTY
+
+          On narrow screens the buttons share the top line with the small
+          label, so the title gets the full width. The badge and labels never
+          break mid-phrase. */}
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-8 border-b border-stone pb-4 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+        <div className="col-start-1 row-start-1">
           <Label>Machine {toRoman(level.number)}</Label>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <h1 className="text-4xl font-bold">{level.title}</h1>
-            <StatusBadge status={progress.status} celebrate={justSolved} />
-          </div>
         </div>
-        <div className="flex flex-wrap items-end gap-5 sm:gap-8">
+        <div className="col-span-2 row-start-2 flex flex-wrap items-center gap-x-4 gap-y-2 lg:col-span-1">
+          <h1 className="text-4xl font-bold">{level.title}</h1>
+          <StatusBadge status={progress.status} celebrate={justSolved} />
+        </div>
+        <div className="col-span-2 row-start-3 mt-4 flex gap-6 sm:gap-8 lg:col-span-1 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0">
           <Counter label="Queries" value={queries} />
           <Counter label="Wrong answers" value={wrongSubmissions} />
           <Counter label="Penalty" value={penalty} />
+        </div>
+        <div className="col-start-2 row-start-1 mb-2 flex items-center gap-3 lg:col-start-3 lg:row-span-2 lg:mb-0 lg:gap-8">
           <MuteButton />
           <button
             type="button"
@@ -125,7 +136,9 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
         </div>
       </header>
 
-      <div className="mt-8 grid items-stretch gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      {/* minmax(0, ...) on both layouts: a plain column would grow to its widest
+          content (a long line of code, a wide table) and push off the screen. */}
+      <div className="mt-8 grid grid-cols-[minmax(0,1fr)] items-stretch gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="flex flex-col gap-6">
           <FormatCard title="Input" body={level.inputFormat} />
           <FormatCard title="Output" body={level.outputFormat} />

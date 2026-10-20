@@ -85,7 +85,7 @@ export function ObservationPanel({ level, log, onProgress }: ObservationPanelPro
         The samples are free. Each additional query costs {PENALTY_COSTS.query}.
       </p>
 
-      <form onSubmit={onSubmit} className="mt-4 flex items-start gap-4">
+      <form onSubmit={onSubmit} className="mt-4 flex items-start gap-3 sm:gap-4">
         <textarea
           value={input}
           onChange={(event) => {
@@ -104,12 +104,12 @@ export function ObservationPanel({ level, log, onProgress }: ObservationPanelPro
           data-enable-grammarly="false"
           aria-label="Query input"
           placeholder="Input for the machine"
-          className="min-h-12 flex-1 resize-none rounded-md border border-stone bg-paper p-3 font-mono text-sm outline-offset-2 outline-walnut placeholder:text-taupe focus-visible:outline-2"
+          className="min-h-12 min-w-0 flex-1 resize-none rounded-md border border-stone bg-paper p-3 font-mono text-sm outline-offset-2 outline-walnut placeholder:truncate placeholder:text-taupe max-sm:placeholder:text-xs focus-visible:outline-2"
         />
         <button
           type="submit"
           disabled={pending}
-          className="h-12 cursor-pointer rounded-md border border-walnut bg-walnut px-6 text-xs tracking-label text-paper uppercase outline-offset-4 outline-walnut transition-colors hover:bg-ink focus-visible:outline-2 disabled:cursor-default disabled:opacity-60"
+          className="h-12 cursor-pointer rounded-md border border-walnut bg-walnut px-4 text-xs tracking-label sm:px-6 text-paper uppercase outline-offset-4 outline-walnut transition-colors hover:bg-ink focus-visible:outline-2 disabled:cursor-default disabled:opacity-60"
         >
           {pending ? "Asking" : "Query"}
         </button>
@@ -127,10 +127,10 @@ export function ObservationPanel({ level, log, onProgress }: ObservationPanelPro
             <th className="w-16 pb-2 font-normal">
               <Label>#</Label>
             </th>
-            <th className="pb-2 font-normal">
+            <th className="pr-3 pb-2 font-normal">
               <Label>Input</Label>
             </th>
-            <th className="pb-2 font-normal">
+            <th className="pr-3 pb-2 font-normal">
               <Label>Output</Label>
             </th>
             <th className="w-28 pb-2 font-normal">
@@ -144,8 +144,8 @@ export function ObservationPanel({ level, log, onProgress }: ObservationPanelPro
               <td className="px-2 py-2 text-taupe">
                 {String(index + 1).padStart(2, "0")}
               </td>
-              <td className="py-2 whitespace-pre-wrap">{observation.input.trimEnd()}</td>
-              <td className="py-2 whitespace-pre-wrap text-walnut">
+              <td className="py-2 pr-3 whitespace-pre-wrap">{observation.input.trimEnd()}</td>
+              <td className="py-2 pr-3 whitespace-pre-wrap text-walnut">
                 {observation.output.trimEnd()}
               </td>
               <td className="py-2 font-display">
