@@ -16,6 +16,10 @@ type HypothesisPanelProps = {
   levelNumber: number;
   /** The player's progress after every verdict: counters, log and solved state. */
   onProgress: (progress: Progress) => void;
+  /** Code to start from instead of the starter code: the latest solution, on a solved level. */
+  initialDraft?: { language: Language; code: string };
+  /** Present once the level is solved: back to the completion panel. */
+  onShowSolution?: () => void;
 };
 
 type Status = {
@@ -83,10 +87,17 @@ function describe(result: SubmissionResult): Status {
 }
 
 /** The right-hand panel: pick a language, write the code, run or submit it. */
-export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProps) {
-  const [language, setLanguage] = useState<Language>("cpp");
+export function HypothesisPanel({
+  levelNumber,
+  onProgress,
+  initialDraft,
+  onShowSolution,
+}: HypothesisPanelProps) {
+  const [language, setLanguage] = useState<Language>(initialDraft?.language ?? "cpp");
   // One draft per language, so switching language does not lose your work.
-  const [drafts, setDrafts] = useState(STARTER_CODE);
+  const [drafts, setDrafts] = useState(() =>
+    initialDraft ? { ...STARTER_CODE, [initialDraft.language]: initialDraft.code } : STARTER_CODE,
+  );
   // Which button is waiting on the judge, if any. Only one at a time.
   const [busy, setBusy] = useState<"run" | "submit" | null>(null);
   const [status, setStatus] = useState<Status>({
@@ -192,11 +203,22 @@ export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProp
       {/* The language picker drops below the heading when there is no room beside it. */}
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div>
-          <h2 className="text-xl italic">Your hypothesis</h2>
+          <h2 className="text-xl italic">Your Hypothesis</h2>
           <p className="mt-1 text-sm text-taupe">
-            Write the logic you believe the machine follows.
+            {onShowSolution
+              ? "Solved. Your penalty is settled; try again as you like."
+              : "Write the logic you believe the machine follows."}
           </p>
         </div>
+        {onShowSolution && (
+          <button
+            type="button"
+            onClick={onShowSolution}
+            className="cursor-pointer rounded-md border border-stone bg-paper px-4 py-2 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2"
+          >
+            Solution
+          </button>
+        )}
         <label className="flex items-center gap-3">
           <span className="text-xs tracking-label text-taupe uppercase">
             Language

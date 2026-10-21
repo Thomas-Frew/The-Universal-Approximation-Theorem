@@ -11,8 +11,9 @@ import { readConfig } from "./config.ts";
 import { loadLevels, readManifest } from "./levels.ts";
 import { createGame } from "./game.ts";
 import { createJudge } from "./judge.ts";
+import { createStats } from "./stats.ts";
 
-const { levelsDir, cacheDir, databaseUrl, authSecret, authUrl, demo, debug, judge0Url, webDir } =
+const { levelsDir, cacheDir, databaseUrl, authSecret, authUrl, demo, debug, judge0Url, webDir, statsExcludeToken } =
   readConfig();
 
 // Checked before anything else: progress lives in Postgres, so without it
@@ -58,6 +59,7 @@ const app = createApp({
   levels: loaded.map(({ level }) => level),
   demo,
   game,
+  stats: createStats({ db, levels: loaded, excludeToken: statsExcludeToken }),
 });
 
 // The server: the API's routes, a health check for Dokploy, and in production

@@ -117,14 +117,67 @@
   animation: screen-leave-up var(--screen-transition) var(--ease-screen) both;
 }
 
-::view-transition-new(level) {
+/* Only straight from the intro (the demo, which has no level select). */
+:root[data-from="intro"]::view-transition-new(level) {
   animation: screen-enter-up var(--screen-transition) var(--ease-screen) both;
 }
 
-/* Back to the intro is a plain cross-fade, a little slower than the default. */
+/* The level select sits between the intro and the levels, so it arrives and
+   leaves either way. App.tsx sets data-from and data-to on the root before
+   each transition. Intro to select carries on the intro's upward scroll. */
+:root[data-from="intro"]::view-transition-new(select) {
+  animation: screen-enter-up var(--screen-transition) var(--ease-screen) both;
+}
+
+/* Everything else (back to the intro, a level or the stats page to the
+   select, and the select to either) is a plain cross-fade, a little slower
+   than the default. */
 ::view-transition-old(level),
-::view-transition-new(intro) {
+::view-transition-new(intro),
+::view-transition-old(stats),
+::view-transition-new(stats),
+:root[data-to="intro"]::view-transition-old(select),
+:root[data-from="level"]::view-transition-new(select),
+:root[data-from="stats"]::view-transition-new(select),
+:root[data-to="level"]::view-transition-old(select),
+:root[data-to="stats"]::view-transition-old(select),
+:root[data-from="select"]::view-transition-new(level) {
   animation-duration: 500ms;
+}
+
+/* First solves on the stats page: a slow glint of brass across the card,
+   now and then. Off under reduced motion. */
+.shine {
+  position: relative;
+  overflow: hidden;
+}
+.shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    110deg,
+    transparent 40%,
+    color-mix(in oklab, var(--color-brass) 22%, transparent) 50%,
+    transparent 60%
+  );
+  background-size: 250% 100%;
+  animation: shine 5s ease-in-out infinite;
+}
+@keyframes shine {
+  0%,
+  40% {
+    background-position: 150% 0;
+  }
+  100% {
+    background-position: -50% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shine::after {
+    display: none;
+  }
 }
 
 /* CodeMirror (CodeEditor.tsx). These sit outside any @layer on purpose:

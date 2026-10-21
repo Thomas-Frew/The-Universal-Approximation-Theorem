@@ -20,6 +20,8 @@ type CodeEditorProps = {
   language: Language;
   value: string;
   onChange: (value: string) => void;
+  /** Shows the code without letting it be changed (fixed when the editor is created). */
+  readOnly?: boolean;
 };
 
 /**
@@ -27,7 +29,7 @@ type CodeEditorProps = {
  * React only creates it once and then pushes prop changes into it.
  * Colours come from the `.cm-*` and `.tok-*` rules in index.css.
  */
-export function CodeEditor({ language, value, onChange }: CodeEditorProps) {
+export function CodeEditor({ language, value, onChange, readOnly = false }: CodeEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   // A compartment is a slot in the config that can be swapped while running.
@@ -51,6 +53,10 @@ export function CodeEditor({ language, value, onChange }: CodeEditorProps) {
           // Tag tokens with `tok-*` classes instead of inline colours.
           syntaxHighlighting(classHighlighter),
           languageSlot.current.of(LANGUAGE_SUPPORT[language]()),
+          // Read-only: no edits, and no cursor (contenteditable off), though
+          // the text can still be selected and copied.
+          EditorState.readOnly.of(readOnly),
+          EditorView.editable.of(!readOnly),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
           }),

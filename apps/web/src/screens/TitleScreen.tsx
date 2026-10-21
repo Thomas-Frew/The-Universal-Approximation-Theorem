@@ -1,5 +1,7 @@
-import type { Ref } from "react";
+import { type Ref, useEffect } from "react";
 import { Keycap } from "../components/Keycap";
+import { MuteButton } from "../components/MuteButton";
+import { playWhenAllowed } from "../lib/sound";
 
 type TitleScreenProps = {
   ref: Ref<HTMLElement>;
@@ -7,6 +9,11 @@ type TitleScreenProps = {
 };
 
 export function TitleScreen({ ref, onNext }: TitleScreenProps) {
+  // The title tune, each time the title is shown. On a first visit the
+  // browser holds all sound until the first click or key press, so then it
+  // starts on that (usually Begin) and carries on over the about page.
+  useEffect(() => playWhenAllowed("title"), []);
+
   return (
     <section
       ref={ref}
@@ -36,6 +43,14 @@ export function TitleScreen({ ref, onNext }: TitleScreenProps) {
           <span className="draw-ink inline-block [--delay:1300ms]">Theorem</span>
         </span>
       </h1>
+
+      {/* The title tune plays here, before the level screen's mute button is
+          ever seen, so the title has one too, there from the first moment
+          rather than drawn in with the rest. Pressing it first is safe:
+          muting stops the tune before it can start. */}
+      <div className="absolute top-6 right-6">
+        <MuteButton />
+      </div>
 
       <div className="draw-fade absolute bottom-12 [--delay:3000ms]">
         <Keycap direction="down" label="Begin" showLabel bob onClick={onNext} />

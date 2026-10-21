@@ -26,7 +26,7 @@ export function AboutScreen({ ref, onBack, onStart, demo }: AboutScreenProps) {
       <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto overscroll-contain">
         <div className="my-auto max-w-[80vw]">
           <h2 className="text-center text-[clamp(1.5rem,2.1vw,2.75rem)] text-brass italic">
-            What is the universal approximation theorem?
+            What Is the Universal Approximation Theorem?
           </h2>
 
           <div className="mx-auto mt-14 max-w-[58ch] space-y-7 text-[clamp(1.0625rem,1.3vw,1.625rem)] leading-relaxed text-pretty">

@@ -12,6 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:reset": "node --env-file-if-exists=.env scripts/reset-db.ts",
+    "db:seed": "node --env-file-if-exists=.env scripts/seed-db.ts",
     "db:auth-schema": "auth generate --config better-auth.config.ts --output src/db/auth-schema.ts --yes",
     "typecheck": "tsc"
   },

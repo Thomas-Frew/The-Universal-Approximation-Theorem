@@ -1,6 +1,10 @@
 import correctUrl from "../assets/sounds/correct.m4a";
+import enterUrl from "../assets/sounds/enter.m4a";
+import leaveUrl from "../assets/sounds/leave.m4a";
 import queryUrl from "../assets/sounds/query.m4a";
+import titleUrl from "../assets/sounds/title.m4a";
 import unknownUrl from "../assets/sounds/unknown.m4a";
+import unmuteUrl from "../assets/sounds/unmute.m4a";
 import wrongUrl from "../assets/sounds/wrong.m4a";
 
 /**
@@ -21,6 +25,10 @@ const URLS = {
   unknown: unknownUrl,
   correct: correctUrl,
   wrong: wrongUrl,
+  enter: enterUrl,
+  leave: leaveUrl,
+  title: titleUrl,
+  unmute: unmuteUrl,
 };
 export type Sound = keyof typeof URLS;
 
@@ -52,6 +60,16 @@ export function setMuted(value: boolean): void {
     // Private browsing and the like: muting still works for this visit.
   }
   for (const listener of listeners) listener();
+}
+
+/**
+ * What every sound switch does (the speaker buttons, the settings menu):
+ * flips muting, and on turning sound back on says so with `unmute`, G rising
+ * to C. Call it from the click itself, which also unlocks audio.
+ */
+export function toggleMuted(): void {
+  setMuted(!muted);
+  if (!muted) void playSound("unmute");
 }
 
 /** For React's useSyncExternalStore: call `listener` whenever muting changes. */
@@ -109,6 +127,30 @@ function load(name: Sound): Promise<AudioBuffer | null> {
  */
 export function preloadSounds(): void {
   for (const name of Object.keys(URLS) as Sound[]) void download(name);
+}
+
+/**
+ * Plays a sound as soon as the browser allows: at once if the visitor has
+ * already clicked or pressed a key on this page, or else on their first
+ * click, tap or key press. Returns a function that cancels a sound still
+ * waiting for that.
+ */
+export function playWhenAllowed(name: Sound): () => void {
+  if (navigator.userActivation?.hasBeenActive) {
+    void playSound(name);
+    return () => {};
+  }
+  const play = () => {
+    cancel();
+    void playSound(name);
+  };
+  const cancel = () => {
+    window.removeEventListener("pointerdown", play);
+    window.removeEventListener("keydown", play);
+  };
+  window.addEventListener("pointerdown", play);
+  window.addEventListener("keydown", play);
+  return cancel;
 }
 
 /** Stops whatever is playing. */

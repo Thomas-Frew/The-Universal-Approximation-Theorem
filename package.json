@@ -13,6 +13,7 @@
     "db:down": "docker compose stop db",
     "db:generate": "pnpm --filter @uat/api db:generate",
     "db:migrate": "pnpm --filter @uat/api db:migrate",
-    "db:reset": "pnpm --filter @uat/api db:reset"
+    "db:reset": "pnpm --filter @uat/api db:reset",
+    "db:seed": "pnpm --filter @uat/api db:seed"
   }
 }

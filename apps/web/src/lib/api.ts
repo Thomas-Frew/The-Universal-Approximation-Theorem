@@ -1,11 +1,14 @@
 import type { AppType } from "@uat/api";
 import {
   type Language,
+  levelListResponseSchema,
   levelResponseSchema,
   progressSchema,
   queryResponseSchema,
   type RunResult,
   runResultSchema,
+  type StatsResponse,
+  statsResponseSchema,
   submissionResponseSchema,
 } from "@uat/shared";
 import { z } from "zod";
@@ -37,6 +40,16 @@ export async function fetchLevel(number: number): Promise<LevelResponse> {
   if (!response.ok) throw await failure(response);
   // The types say what this is, but only the schema can check it.
   return levelResponseSchema.parse(await response.json());
+}
+
+/** Every level and the player's standing on each, for the level select. */
+export type LevelListResponse = z.infer<typeof levelListResponseSchema>;
+
+export async function fetchLevels(): Promise<LevelListResponse> {
+  await ensureSession();
+  const response = await client.api.levels.$get();
+  if (!response.ok) throw await failure(response);
+  return levelListResponseSchema.parse(await response.json());
 }
 
 /** Asks a level's machine for its answer. A rejected input is a result, not an error. */
@@ -87,4 +100,38 @@ export async function resetProgress(levelNumber: number) {
   });
   if (!response.ok) throw await failure(response);
   return z.object({ progress: progressSchema }).parse(await response.json()).progress;
+}
+
+/** Deletes everything the player has done, on every level. They keep their session. */
+export async function wipeProgress(): Promise<void> {
+  await ensureSession();
+  const response = await client.api.progress.$delete();
+  if (!response.ok) throw await failure(response);
+}
+
+/** The player's statistics, for the stats page. */
+export async function fetchStats(): Promise<StatsResponse> {
+  await ensureSession();
+  const response = await client.api.stats.$get();
+  if (!response.ok) throw await failure(response);
+  return statsResponseSchema.parse(await response.json());
+}
+
+/**
+ * "Still here": called every HEARTBEAT_SECONDS while a level is open in a
+ * visible tab, to count time played. Failures are ignored: a missed beat
+ * only loses half a minute of timing, never anything the player sees.
+ */
+export async function sendHeartbeat(levelNumber: number): Promise<void> {
+  await ensureSession();
+  await client.api.levels[":number"].heartbeat
+    .$post({ param: { number: String(levelNumber) } })
+    .catch(() => undefined);
+}
+
+/** The `?exclude=` link: leave this browser's player out of global stats. */
+export async function excludeFromStats(token: string): Promise<void> {
+  await ensureSession();
+  const response = await client.api.me.exclude.$post({ json: { token } });
+  if (!response.ok) throw await failure(response);
 }

@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import {
+  HEARTBEAT_SECONDS,
   type Level,
+  LEVEL_RULES,
+  type LevelSummary,
   type LogEntry,
   MAX_RUN_OBSERVATIONS,
   normaliseInput,
@@ -10,9 +13,9 @@ import {
   type SubmissionRequest,
   type SubmissionResult,
 } from "@uat/shared";
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, countDistinct, eq, sql } from "drizzle-orm";
 import type { Database } from "./db/index.ts";
-import { machineAnswers, observations, submissions } from "./db/schema.ts";
+import { machineAnswers, observations, playTime, submissions } from "./db/schema.ts";
 import { GameError } from "./errors.ts";
 import { createGate } from "./gate.ts";
 import type { Judge } from "./judge.ts";
@@ -30,6 +33,31 @@ import { askMachine } from "./query.ts";
  */
 
 const WRONG_VERDICTS = new Set(["wrong_answer", "runtime_error", "time_limit"]);
+
+/**
+ * Where a player stands on one version of a level, from their rows for it:
+ * the one place progress is counted, shared by the level page and the level
+ * select so the two always agree. Attempts must be in the order they were made.
+ * Penalty stops growing at the first accepted submission.
+ */
+export function tally(
+  entries: readonly { source: "query" | "revealed"; createdAt: Date }[],
+  attempts: readonly { verdict: string; createdAt: Date }[],
+): Pick<Progress, "status" | "queries" | "wrongSubmissions"> {
+  const solvedAt = attempts.find((attempt) => attempt.verdict === "accepted")?.createdAt;
+  const counts = (createdAt: Date) => !solvedAt || createdAt < solvedAt;
+  return {
+    status: solvedAt
+      ? "solved"
+      : entries.length > 0 || attempts.length > 0
+        ? "in_progress"
+        : "new",
+    queries: entries.filter((entry) => entry.source === "query" && counts(entry.createdAt)).length,
+    wrongSubmissions: attempts.filter(
+      (attempt) => WRONG_VERDICTS.has(attempt.verdict) && counts(attempt.createdAt),
+    ).length,
+  };
+}
 
 // Limits against abuse, not game rules: a real player should never meet one.
 
@@ -98,7 +126,7 @@ export function createGame({
 
   /** Rows for this player on this level's current version. */
   const mine = (
-    table: typeof observations | typeof submissions,
+    table: typeof observations | typeof submissions | typeof playTime,
     userId: string,
     level: Level,
   ) =>
@@ -121,31 +149,108 @@ export function createGame({
         .where(mine(observations, userId, level))
         .orderBy(asc(observations.id)),
       db
-        .select({ verdict: submissions.verdict, createdAt: submissions.createdAt })
+        .select({
+          verdict: submissions.verdict,
+          createdAt: submissions.createdAt,
+          language: submissions.language,
+          code: submissions.code,
+        })
         .from(submissions)
         .where(mine(submissions, userId, level))
         .orderBy(asc(submissions.id)),
     ]);
-
-    // Penalty stops growing at the first accepted submission.
-    const solvedAt = attempts.find((attempt) => attempt.verdict === "accepted")?.createdAt;
-    const counts = (createdAt: Date) => !solvedAt || createdAt < solvedAt;
-
+    const { status, queries, wrongSubmissions } = tally(entries, attempts);
+    // The most recent accepted submission: after solving, a player may solve it
+    // again, and the code view shows their latest. (The penalty still freezes
+    // at the first, in `tally`.)
+    const accepted = [...attempts].reverse().find((attempt) => attempt.verdict === "accepted");
     return {
-      status: solvedAt
-        ? "solved"
-        : entries.length > 0 || attempts.length > 0
-          ? "in_progress"
-          : "new",
+      status,
       // The answer, in words: the reward for solving, so never sent before.
-      ...(solvedAt && { solution: find(level).solution }),
+      ...(status === "solved" && { solution: find(level).solution }),
+      // Their own code that last solved it, to read back from the completion panel.
+      ...(accepted && { solvedWith: { language: accepted.language, code: accepted.code } }),
       log: entries.map(({ input, output, source }) => ({ input, output, source })),
-      queries: entries.filter((entry) => entry.source === "query" && counts(entry.createdAt))
-        .length,
-      wrongSubmissions: attempts.filter(
-        (attempt) => WRONG_VERDICTS.has(attempt.verdict) && counts(attempt.createdAt),
-      ).length,
+      queries,
+      wrongSubmissions,
     };
+  }
+
+  /**
+   * Every level in play order with where this player stands, for the level
+   * select. Two queries for all levels, not two per level: only the columns
+   * that counting needs, never the inputs or code.
+   *
+   * With `unlockAll` in game.config.json, every level is open. Otherwise a
+   * level is open if it is the first, if the level before it has been
+   * solved (any version), or if the player has already played it (any
+   * version). The last rule means inserting or reordering levels never locks
+   * a player out of one they had reached.
+   */
+  async function listLevels(userId: string): Promise<LevelSummary[]> {
+    const [entries, attempts, solveCounts] = await Promise.all([
+      db
+        .select({
+          levelId: observations.levelId,
+          levelVersion: observations.levelVersion,
+          source: observations.source,
+          createdAt: observations.createdAt,
+        })
+        .from(observations)
+        .where(eq(observations.userId, userId)),
+      db
+        .select({
+          levelId: submissions.levelId,
+          levelVersion: submissions.levelVersion,
+          verdict: submissions.verdict,
+          createdAt: submissions.createdAt,
+        })
+        .from(submissions)
+        .where(eq(submissions.userId, userId))
+        .orderBy(asc(submissions.id)),
+      // Every player's solves, per level and version: one row per pair, not per player.
+      db
+        .select({
+          levelId: submissions.levelId,
+          levelVersion: submissions.levelVersion,
+          solves: countDistinct(submissions.userId),
+        })
+        .from(submissions)
+        .where(eq(submissions.verdict, "accepted"))
+        .groupBy(submissions.levelId, submissions.levelVersion),
+    ]);
+
+    const solvedEver = new Set(
+      attempts.filter((attempt) => attempt.verdict === "accepted").map((attempt) => attempt.levelId),
+    );
+    const playedEver = new Set([...entries, ...attempts].map((row) => row.levelId));
+
+    return levels.map(({ level, difficulty }, index) => {
+      const previous = levels[index - 1];
+      const open =
+        LEVEL_RULES.unlockAll ||
+        !previous ||
+        solvedEver.has(previous.level.id) ||
+        playedEver.has(level.id);
+      const current = <T extends { levelId: string; levelVersion: number }>(row: T) =>
+        row.levelId === level.id && row.levelVersion === level.version;
+      const counts = tally(entries.filter(current), attempts.filter(current));
+      return {
+        number: level.number,
+        title: level.title,
+        difficulty,
+        solves:
+          solveCounts.find((row) => row.levelId === level.id && row.levelVersion === level.version)
+            ?.solves ?? 0,
+        ...(open ? counts : { status: "locked", queries: 0, wrongSubmissions: 0 }),
+      };
+    });
+  }
+
+  /** Whether this player may open, query and submit to this level. */
+  async function isUnlocked(userId: string, level: Level): Promise<boolean> {
+    const summary = (await listLevels(userId)).find((entry) => entry.number === level.number);
+    return summary !== undefined && summary.status !== "locked";
   }
 
   /** The machine's answer, from the shared cache if anyone has asked before. */
@@ -299,12 +404,60 @@ export function createGame({
    * version, so they start it afresh. Only the demo offers this (see app.ts):
    * in the full game it would let a player erase a bad penalty.
    */
+  /**
+   * Deletes everything this player has done, on every level and version: the
+   * settings menu's "Wipe progress". Their account (the anonymous user and its
+   * session) stays, so they simply start the game again. Refused while a
+   * submission is being judged, whose verdict would otherwise land on a log
+   * that no longer exists.
+   */
+  async function wipeProgress(userId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      const [judging] = await tx
+        .select({ id: submissions.id })
+        .from(submissions)
+        .where(and(eq(submissions.userId, userId), eq(submissions.verdict, "pending")))
+        .limit(1);
+      if (judging) {
+        throw new GameError(409, "Wait for your submission to be judged first.");
+      }
+      await tx.delete(observations).where(eq(observations.userId, userId));
+      await tx.delete(submissions).where(eq(submissions.userId, userId));
+      await tx.delete(playTime).where(eq(playTime.userId, userId));
+    });
+  }
+
   async function resetProgress(userId: string, level: Level): Promise<Progress> {
     await db.transaction(async (tx) => {
       await tx.delete(observations).where(mine(observations, userId, level));
       await tx.delete(submissions).where(mine(submissions, userId, level));
+      await tx.delete(playTime).where(mine(playTime, userId, level));
     });
     return getProgress(userId, level);
+  }
+
+  /**
+   * The browser's "still here" while a level is open in a visible tab: adds
+   * HEARTBEAT_SECONDS to the player's time on it. Time freezes on solving,
+   * like penalty, so a solved level gets nothing. A beat less than 25 seconds
+   * after the last adds nothing either, so a second tab, or a script, cannot
+   * make time run faster than the clock.
+   */
+  async function heartbeat(userId: string, level: Level): Promise<void> {
+    const [solved] = await db
+      .select({ id: submissions.id })
+      .from(submissions)
+      .where(and(mine(submissions, userId, level), eq(submissions.verdict, "accepted")))
+      .limit(1);
+    if (solved) return;
+    await db
+      .insert(playTime)
+      .values({ userId, levelId: level.id, levelVersion: level.version, seconds: HEARTBEAT_SECONDS })
+      .onConflictDoUpdate({
+        target: [playTime.userId, playTime.levelId, playTime.levelVersion],
+        set: { seconds: sql`${playTime.seconds} + ${HEARTBEAT_SECONDS}`, updatedAt: sql`now()` },
+        setWhere: sql`${playTime.updatedAt} < now() - interval '25 seconds'`,
+      });
   }
 
   /**
@@ -320,7 +473,18 @@ export function createGame({
     return released.length;
   }
 
-  return { getProgress, query, submit, run, resetProgress, releaseStuckSubmissions };
+  return {
+    getProgress,
+    listLevels,
+    isUnlocked,
+    query,
+    submit,
+    run,
+    resetProgress,
+    wipeProgress,
+    heartbeat,
+    releaseStuckSubmissions,
+  };
 }
 
 export type Game = ReturnType<typeof createGame>;

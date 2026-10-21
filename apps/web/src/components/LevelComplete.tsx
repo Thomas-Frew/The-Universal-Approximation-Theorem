@@ -1,14 +1,20 @@
 import { useState } from "react";
 
-type DemoCompleteProps = {
+type LevelCompleteProps = {
+  /** The public demo: says the full game is coming, and offers to start again. */
+  demo: boolean;
   /** What the machine does, in words; the API sends it once the level is solved. */
   solution: string | undefined;
+  /** Shows the player's own accepted code in place of this panel. */
+  onReadCode: () => void;
+  /** Back to the editor, to query and submit again (the penalty stays frozen). */
+  onTryAgain: () => void;
   /**
    * Solved just now, on this screen: draw the panel in (see "Solving a level"
    * in index.css). Otherwise it simply appears, e.g. when reopening the demo.
    */
   celebrate: boolean;
-  /** Clears the player's progress and returns them to the start of the level. */
+  /** Demo only: clears the player's progress and returns them to the start of the level. */
   onStartAgain: () => Promise<void>;
 };
 
@@ -16,10 +22,11 @@ const buttonBase =
   "cursor-pointer rounded-md border px-6 py-3 text-xs tracking-label uppercase outline-offset-4 outline-walnut transition-colors focus-visible:outline-2 disabled:cursor-default disabled:opacity-60";
 
 /**
- * Takes the editor's place once the demo's only level is solved. The left
- * panel stays, so the player can still look back over their observations.
+ * Takes the editor's place once a level is solved: the solution in words, and
+ * a way to read back the code that solved it. The left panel stays, so the
+ * player can still look back over their observations.
  */
-export function DemoComplete({ solution, celebrate, onStartAgain }: DemoCompleteProps) {
+export function LevelComplete({ demo, solution, celebrate, onReadCode, onTryAgain, onStartAgain }: LevelCompleteProps) {
   // Starting again erases the player's log and submissions, so it takes two
   // clicks: the first asks, the second does it.
   const [step, setStep] = useState<"idle" | "confirm" | "working">("idle");
@@ -85,7 +92,7 @@ export function DemoComplete({ solution, celebrate, onStartAgain }: DemoComplete
       </div>
 
       <h2 className={`mt-8 text-4xl font-bold ${play("draw-rise [--delay:1700ms]")}`}>
-        The full game is coming soon.
+        {demo ? "The full game is coming soon." : "Solved."}
       </h2>
       {solution && (
         <p className={`mt-4 max-w-xl text-lg text-taupe italic ${play("draw-rise [--delay:1900ms]")}`}>
@@ -95,13 +102,31 @@ export function DemoComplete({ solution, celebrate, onStartAgain }: DemoComplete
 
       <div className={`mt-10 flex flex-col items-center gap-3 ${play("draw-rise [--delay:2300ms]")}`}>
         {step === "idle" ? (
-          <button
-            type="button"
-            onClick={() => setStep("confirm")}
-            className={`${buttonBase} border-stone bg-paper hover:bg-linen`}
-          >
-            Start again
-          </button>
+          <div className="flex flex-wrap justify-center gap-3">
+            <button
+              type="button"
+              onClick={onReadCode}
+              className={`${buttonBase} border-walnut bg-walnut text-paper hover:bg-ink`}
+            >
+              Read your code
+            </button>
+            <button
+              type="button"
+              onClick={onTryAgain}
+              className={`${buttonBase} border-stone bg-paper hover:bg-linen`}
+            >
+              Try again
+            </button>
+            {demo && (
+              <button
+                type="button"
+                onClick={() => setStep("confirm")}
+                className={`${buttonBase} border-stone bg-paper hover:bg-linen`}
+              >
+                Start again
+              </button>
+            )}
+          </div>
         ) : (
           <>
             <p className="text-sm text-taupe">This clears your observations and submissions.</p>

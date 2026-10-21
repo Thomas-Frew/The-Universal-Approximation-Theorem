@@ -127,3 +127,35 @@ export const machineAnswers = pgTable(
   },
   (table) => [primaryKey({ columns: [table.levelId, table.levelVersion, table.inputHash] })],
 );
+
+/**
+ * Seconds a player has spent with a level open, for the stats page. The one
+ * stored number in the game: time cannot be counted from other rows, only
+ * measured. While a level is open in a visible tab, the browser sends a
+ * heartbeat every 30 seconds and each one adds 30 here (see `heartbeat` in
+ * game.ts, which ignores beats that come too fast and beats after the level
+ * is solved, so time freezes on solving, like penalty).
+ */
+export const playTime = pgTable(
+  "play_time",
+  {
+    userId: playerColumn(),
+    ...levelColumns(),
+    seconds: integer("seconds").default(0).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.levelId, table.levelVersion] })],
+);
+
+/**
+ * Players left out of every global figure on the stats page (means, first
+ * solves): the game's author and testers. Their own stats page still shows
+ * their numbers. A browser's player is added by opening the game with
+ * `?exclude=<STATS_EXCLUDE_TOKEN>`.
+ */
+export const excludedPlayers = pgTable("excluded_players", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  createdAt: createdAtColumn(),
+});

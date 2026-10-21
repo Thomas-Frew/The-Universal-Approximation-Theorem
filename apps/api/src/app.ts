@@ -1,17 +1,21 @@
 import { zValidator } from "@hono/zod-validator";
 import {
+  excludeRequestSchema,
   type Level,
+  type LevelSummary,
   type Progress,
   type QueryResult,
   queryRequestSchema,
   type RunResult,
   runRequestSchema,
   type SubmissionRequest,
+  type StatsResponse,
   type SubmissionResult,
   submissionRequestSchema,
 } from "@uat/shared";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { createMiddleware } from "hono/factory";
 import { GameError } from "./errors.ts";
 
 /** What the routes need from Better Auth, kept to plain web types. */
@@ -25,6 +29,8 @@ export type AuthDependencies = {
 /** The game's rules, as plain functions of a player and a level. See `game.ts`. */
 export type GameDependencies = {
   getProgress: (userId: string, level: Level) => Promise<Progress>;
+  listLevels: (userId: string) => Promise<LevelSummary[]>;
+  isUnlocked: (userId: string, level: Level) => Promise<boolean>;
   query: (
     userId: string,
     level: Level,
@@ -37,6 +43,14 @@ export type GameDependencies = {
   ) => Promise<{ verdict: SubmissionResult; progress: Progress }>;
   run: (userId: string, level: Level, submission: SubmissionRequest) => Promise<RunResult>;
   resetProgress: (userId: string, level: Level) => Promise<Progress>;
+  wipeProgress: (userId: string) => Promise<void>;
+  heartbeat: (userId: string, level: Level) => Promise<void>;
+};
+
+/** The stats page, from `stats.ts`. */
+export type StatsDependencies = {
+  getStats: (userId: string) => Promise<StatsResponse>;
+  exclude: (userId: string, token: string) => Promise<void>;
 };
 
 /** Values the middleware attaches to each request, read with `c.get(...)`. */
@@ -49,6 +63,7 @@ export type AppDependencies = {
   /** Whether this is the public demo; passed on to the browser with each level. */
   demo: boolean;
   game: GameDependencies;
+  stats: StatsDependencies;
 };
 
 /**
@@ -56,7 +71,25 @@ export type AppDependencies = {
  * database) is passed in, so the web app can import `AppType` without pulling
  * in Node types.
  */
-export function createApp({ auth, levels, demo, game }: AppDependencies) {
+export function createApp({ auth, levels, demo, game, stats }: AppDependencies) {
+  const requirePlayer = createMiddleware<{ Variables: Variables }>(async (c, next) => {
+    const userId = await auth.getUserId(c.req.raw.headers);
+    if (!userId) {
+      return c.json({ error: "No session. Reload the page to start one." }, 401);
+    }
+    c.set("userId", userId);
+    await next();
+  });
+
+  const unlockedLevel = async (userId: string, number: string): Promise<Level> => {
+    const level = levels.find((candidate) => String(candidate.number) === number);
+    if (!level) throw new GameError(404, "No such level.");
+    if (!(await game.isUnlocked(userId, level))) {
+      throw new GameError(403, "That machine is locked. Solve the one before it first.");
+    }
+    return level;
+  };
+
   const app = new Hono<{ Variables: Variables }>()
     .basePath("/api")
     // Before anything reads a body. The schemas cap code and query input at
@@ -74,28 +107,37 @@ export function createApp({ auth, levels, demo, game }: AppDependencies) {
     .on(["GET", "POST"], "/auth/*", (c) => auth.handler(c.req.raw))
     // Every game route needs a player. The browser signs in anonymously before
     // its first call, so a request without a session is a bug or a stranger.
-    .use("/levels/*", async (c, next) => {
-      const userId = await auth.getUserId(c.req.raw.headers);
-      if (!userId) {
-        return c.json({ error: "No session. Reload the page to start one." }, 401);
-      }
-      c.set("userId", userId);
-      await next();
+    .use("/levels", requirePlayer)
+    .use("/progress", requirePlayer)
+    // Wipe everything this player has done, on every level. Allowed in the
+    // full game too: it resets solves along with penalties, so it cannot be
+    // used to keep a solve and lose its penalty.
+    .delete("/progress", async (c) => {
+      await game.wipeProgress(c.get("userId"));
+      return c.json({ ok: true as const }, 200);
     })
-    // ...and every one of them is about one level.
+    // The stats page.
+    .use("/stats", requirePlayer)
+    .get("/stats", async (c) => c.json(await stats.getStats(c.get("userId")), 200))
+    // The `?exclude=` link: leave this player out of global stats.
+    .use("/me/*", requirePlayer)
+    .post("/me/exclude", zValidator("json", excludeRequestSchema), async (c) => {
+      await stats.exclude(c.get("userId"), c.req.valid("json").token);
+      return c.json({ ok: true as const }, 200);
+    })
+    .use("/levels/*", requirePlayer)
+    // The level select: every level, with where this player stands on each.
+    .get("/levels", async (c) =>
+      c.json({ levels: await game.listLevels(c.get("userId")), demo }, 200),
+    )
+    // Every route below is about one level, which must exist and be unlocked
+    // for this player. Checked here, not just greyed out in the browser.
     .use("/levels/:number/*", async (c, next) => {
-      const level = levels.find((candidate) => String(candidate.number) === c.req.param("number"));
-      if (!level) {
-        return c.json({ error: "No such level." }, 404);
-      }
-      c.set("level", level);
+      c.set("level", await unlockedLevel(c.get("userId"), c.req.param("number")));
       await next();
     })
     .get("/levels/:number", async (c) => {
-      const level = levels.find((candidate) => String(candidate.number) === c.req.param("number"));
-      if (!level) {
-        return c.json({ error: "No such level." }, 404);
-      }
+      const level = await unlockedLevel(c.get("userId"), c.req.param("number"));
       const progress = await game.getProgress(c.get("userId"), level);
       return c.json({ level, progress, demo }, 200);
     })
@@ -105,6 +147,11 @@ export function createApp({ auth, levels, demo, game }: AppDependencies) {
     .post("/levels/:number/submissions", zValidator("json", submissionRequestSchema), async (c) =>
       c.json(await game.submit(c.get("userId"), c.get("level"), c.req.valid("json")), 200),
     )
+    // "Still here", every 30 seconds while the level is open: time played.
+    .post("/levels/:number/heartbeat", async (c) => {
+      await game.heartbeat(c.get("userId"), c.get("level"));
+      return c.json({ ok: true as const }, 200);
+    })
     .post("/levels/:number/runs", zValidator("json", runRequestSchema), async (c) =>
       c.json(await game.run(c.get("userId"), c.get("level"), c.req.valid("json")), 200),
     )

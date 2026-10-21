@@ -7,6 +7,8 @@ export default defineConfig({
   server: {
     // The browser only ever talks to Vite; Vite forwards /api to the API
     // server (apps/api, port 8787), so there is no cross-origin request.
-    proxy: { "/api": "http://localhost:8787" },
+    // API_URL points it elsewhere, e.g. at a second API run with
+    // DEMO_MODE=false to try the full game beside the demo.
+    proxy: { "/api": process.env.API_URL ?? "http://localhost:8787" },
   },
 });
