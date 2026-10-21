@@ -1,9 +1,7 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import { penaltyOf, type StatsResponse } from "@uat/shared";
 import { asc, type Column, eq, notInArray } from "drizzle-orm";
 import type { Database } from "./db/index.ts";
 import { excludedPlayers, observations, playTime, submissions } from "./db/schema.ts";
-import { GameError } from "./errors.ts";
 import { tally } from "./game.ts";
 import type { LoadedLevel } from "./levels.ts";
 
@@ -14,7 +12,7 @@ import type { LoadedLevel } from "./levels.ts";
  * from `play_time`.
  *
  * Global figures (means, who solved each machine first) leave out excluded
- * players, and are cached for a minute: they read every player's rows.
+ * players (admins: see admin.ts), and are cached for a minute: they read every player's rows.
  */
 
 /** How long global figures are reused before being counted again. */
@@ -87,16 +85,7 @@ function acRate(results: LevelResult[]): number | null {
   return accepted + wrong === 0 ? null : accepted / (accepted + wrong);
 }
 
-export function createStats({
-  db,
-  levels,
-  excludeToken,
-}: {
-  db: Database;
-  levels: readonly LoadedLevel[];
-  /** STATS_EXCLUDE_TOKEN, or null when the exclude link is switched off. */
-  excludeToken: string | null;
-}) {
+export function createStats({ db, levels }: { db: Database; levels: readonly LoadedLevel[] }) {
   /** Rows that counting needs (never inputs or code), for one player or for everyone not excluded. */
   async function loadRows(only: { userId: string } | "everyone"): Promise<Rows> {
     const notExcluded = (column: Column) =>
@@ -227,19 +216,10 @@ export function createStats({
     };
   }
 
-  /**
-   * Leaves this player out of every global figure, for good, if `token` is
-   * STATS_EXCLUDE_TOKEN. Compared in constant time, so the response time says
-   * nothing about how much of a guess was right.
-   */
-  async function exclude(userId: string, token: string): Promise<void> {
-    const digest = (text: string) => createHash("sha256").update(text).digest();
-    if (!excludeToken || !timingSafeEqual(digest(token), digest(excludeToken))) {
-      throw new GameError(403, "That link is not valid.");
-    }
-    await db.insert(excludedPlayers).values({ userId }).onConflictDoNothing();
+  /** Drops the cached global figures, e.g. when a player becomes an admin and so stops counting. */
+  function forget(): void {
     cached = null;
   }
 
-  return { getStats, exclude };
+  return { getStats, forget };
 }

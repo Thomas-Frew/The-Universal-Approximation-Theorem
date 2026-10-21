@@ -1,5 +1,11 @@
 import type { AppType } from "@uat/api";
 import {
+  type AdminFeedbackResponse,
+  adminFeedbackResponseSchema,
+  adminStatusSchema,
+  type Feedback,
+  feedbackResponseSchema,
+  type GameFeedback,
   type Language,
   levelListResponseSchema,
   levelResponseSchema,
@@ -129,9 +135,52 @@ export async function sendHeartbeat(levelNumber: number): Promise<void> {
     .catch(() => undefined);
 }
 
-/** The `?exclude=` link: leave this browser's player out of global stats. */
-export async function excludeFromStats(token: string): Promise<void> {
+/** The `?admin=` link: make this browser's player an admin. */
+export async function claimAdmin(token: string): Promise<void> {
   await ensureSession();
-  const response = await client.api.me.exclude.$post({ json: { token } });
+  const response = await client.api.me.admin.$post({ json: { token } });
+  if (!response.ok) throw await failure(response);
+}
+
+/** Whether this browser's player is an admin. */
+export async function fetchIsAdmin(): Promise<boolean> {
+  await ensureSession();
+  const response = await client.api.me.admin.$get();
+  if (!response.ok) throw await failure(response);
+  return adminStatusSchema.parse(await response.json()).admin;
+}
+
+/** Admins only: everything players have said, about the game and each level. */
+export async function fetchAdminFeedback(): Promise<AdminFeedbackResponse> {
+  await ensureSession();
+  const response = await client.api.admin.feedback.$get();
+  if (!response.ok) throw await failure(response);
+  return adminFeedbackResponseSchema.parse(await response.json());
+}
+
+/** What the player last said about a level, or null if they have not yet. */
+export async function fetchFeedback(levelNumber: number): Promise<Feedback | null> {
+  await ensureSession();
+  const response = await client.api.levels[":number"].feedback.$get({
+    param: { number: String(levelNumber) },
+  });
+  if (!response.ok) throw await failure(response);
+  return feedbackResponseSchema.parse(await response.json()).feedback;
+}
+
+/** Saves the player's feedback on a level, replacing any they sent before. */
+export async function sendFeedback(levelNumber: number, feedback: Feedback): Promise<void> {
+  await ensureSession();
+  const response = await client.api.levels[":number"].feedback.$put({
+    param: { number: String(levelNumber) },
+    json: feedback,
+  });
+  if (!response.ok) throw await failure(response);
+}
+
+/** Sends a message about the whole game. Each one is kept; none replaces another. */
+export async function sendGameFeedback(feedback: GameFeedback): Promise<void> {
+  await ensureSession();
+  const response = await client.api.me.feedback.$post({ json: feedback });
   if (!response.ok) throw await failure(response);
 }

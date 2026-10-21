@@ -4,6 +4,7 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { Hono } from "hono";
+import { createAdmin } from "./admin.ts";
 import { createApp } from "./app.ts";
 import { createAuth } from "./auth.ts";
 import { checkConnection, connect } from "./db/index.ts";
@@ -13,7 +14,7 @@ import { createGame } from "./game.ts";
 import { createJudge } from "./judge.ts";
 import { createStats } from "./stats.ts";
 
-const { levelsDir, cacheDir, databaseUrl, authSecret, authUrl, demo, debug, judge0Url, webDir, statsExcludeToken } =
+const { levelsDir, cacheDir, databaseUrl, authSecret, authUrl, demo, debug, judge0Url, webDir, adminToken } =
   readConfig();
 
 // Checked before anything else: progress lives in Postgres, so without it
@@ -51,6 +52,8 @@ const game = createGame({
 const released = await game.releaseStuckSubmissions();
 if (released > 0) console.log(`Released ${released} submission(s) left pending by the last run`);
 
+const stats = createStats({ db, levels: loaded });
+
 const app = createApp({
   auth: {
     handler: (request) => auth.handler(request),
@@ -59,7 +62,8 @@ const app = createApp({
   levels: loaded.map(({ level }) => level),
   demo,
   game,
-  stats: createStats({ db, levels: loaded, excludeToken: statsExcludeToken }),
+  stats,
+  admin: createAdmin({ db, levels: loaded, token: adminToken, onNewAdmin: stats.forget }),
 });
 
 // The server: the API's routes, a health check for Dokploy, and in production

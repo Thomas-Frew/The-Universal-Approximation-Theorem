@@ -11,7 +11,7 @@ type StatsScreenProps = {
 };
 
 const buttonBase =
-  "cursor-pointer rounded-md border border-stone px-4 py-2 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2";
+  "cursor-pointer rounded-md border border-stone bg-paper px-4 py-2 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2";
 
 /** 45 s, 12 m, 1 h 5 m. */
 function formatDuration(seconds: number): string {

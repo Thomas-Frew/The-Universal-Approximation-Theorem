@@ -7,3 +7,5 @@ export * from "./text.ts";
 export * from "./submission.ts";
 export * from "./responses.ts";
 export * from "./stats.ts";
+export * from "./feedback.ts";
+export * from "./admin.ts";

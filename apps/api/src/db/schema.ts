@@ -2,6 +2,8 @@ import { LANGUAGES } from "@uat/shared";
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
+  check,
   index,
   integer,
   pgEnum,
@@ -148,10 +150,11 @@ export const playTime = pgTable(
 );
 
 /**
- * Players left out of every global figure on the stats page (means, first
- * solves): the game's author and testers. Their own stats page still shows
- * their numbers. A browser's player is added by opening the game with
- * `?exclude=<STATS_EXCLUDE_TOKEN>`.
+ * Admins: the game's author and testers. They are left out of every global
+ * figure on the stats page (means, first solves), though their own stats page
+ * still shows their numbers, and they can read every player's feedback. A
+ * browser's player is added by opening the game with `?admin=<ADMIN_TOKEN>`
+ * (see admin.ts). Named for its first job, from before there were admins.
  */
 export const excludedPlayers = pgTable("excluded_players", {
   userId: text("user_id")
@@ -159,3 +162,65 @@ export const excludedPlayers = pgTable("excluded_players", {
     .references(() => user.id, { onDelete: "cascade" }),
   createdAt: createdAtColumn(),
 });
+
+/**
+ * What a player thinks of a level: how hard it was to work out what the
+ * machine does, how hard to implement, and an overall rating, each 1 to 8,
+ * plus an optional comment. One row per player per level version; sending
+ * again replaces it. `solved` records whether they had solved the level when
+ * they last sent it, since the same rating means something different from a
+ * player who gave up. Not progress: wiping progress keeps it.
+ */
+export const feedback = pgTable(
+  "feedback",
+  {
+    userId: playerColumn(),
+    ...levelColumns(),
+    // Each rating is optional: null means the player left it out.
+    understanding: integer("understanding"),
+    implementation: integer("implementation"),
+    overall: integer("overall"),
+    comment: text("comment").default("").notNull(),
+    solved: boolean("solved").notNull(),
+    createdAt: createdAtColumn(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.levelId, table.levelVersion] }),
+    // The schema checks these too; this keeps the table right whatever writes to it.
+    // `between` on a null is null, which a check treats as passing, so a
+    // left-out rating is allowed and a given one must be 1 to 8.
+    check(
+      "feedback_ratings_range",
+      sql`${table.understanding} between 1 and 8 and ${table.implementation} between 1 and 8 and ${table.overall} between 1 and 8`,
+    ),
+    // Everything is optional, but a row must say something.
+    check(
+      "feedback_not_empty",
+      sql`${table.overall} is not null or ${table.understanding} is not null or ${table.implementation} is not null or ${table.comment} <> ''`,
+    ),
+  ],
+);
+
+/**
+ * What a player thinks of the game as a whole, from the settings menu's
+ * Feedback page: an overall rating 1 to 8 and a comment, either optional.
+ * Unlike level feedback, every send is a new row, never a replacement, so a
+ * player can write as often as they like (up to `MAX_GAME_FEEDBACK` in
+ * game.ts). Not progress: wiping progress keeps it.
+ */
+export const gameFeedback = pgTable(
+  "game_feedback",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    userId: playerColumn(),
+    overall: integer("overall"),
+    comment: text("comment").default("").notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (table) => [
+    index("game_feedback_player_idx").on(table.userId),
+    check("game_feedback_overall_range", sql`${table.overall} between 1 and 8`),
+    check("game_feedback_not_empty", sql`${table.overall} is not null or ${table.comment} <> ''`),
+  ],
+);

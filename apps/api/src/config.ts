@@ -37,16 +37,17 @@ export function readConfig() {
     throw new Error("Set BETTER_AUTH_URL to the address the browser uses (see .env.example).");
   }
 
-  // Opening the game with ?exclude=<this> leaves that browser's player out of
-  // global stats. Optional; at least 16 characters so it cannot be guessed.
-  const statsExcludeToken = process.env.STATS_EXCLUDE_TOKEN || null;
-  if (statsExcludeToken && statsExcludeToken.length < 16) {
-    throw new Error("STATS_EXCLUDE_TOKEN must be at least 16 characters, e.g. `openssl rand -hex 16`.");
+  // Opening the game with ?admin=<this> makes that browser's player an admin:
+  // left out of global stats, and able to read every player's feedback.
+  // Optional; at least 16 characters so it cannot be guessed.
+  const adminToken = process.env.ADMIN_TOKEN || null;
+  if (adminToken && adminToken.length < 16) {
+    throw new Error("ADMIN_TOKEN must be at least 16 characters, e.g. `openssl rand -hex 16`.");
   }
 
   return {
     ...readLevelsConfig(),
-    statsExcludeToken,
+    adminToken,
     databaseUrl,
     authSecret,
     authUrl,

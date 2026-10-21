@@ -1,7 +1,10 @@
 import { HEARTBEAT_SECONDS, type Level, penaltyOf, type Progress } from "@uat/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LevelComplete } from "../components/LevelComplete";
+import { AdminLevelFeedbackCard } from "../components/AdminFeedback";
+import { FeedbackSection, type FeedbackSectionHandle } from "../components/FeedbackSection";
 import { HypothesisPanel } from "../components/HypothesisPanel";
+import { GuideButton } from "../components/GuideButton";
 import { Label } from "../components/Label";
 import { MuteButton } from "../components/MuteButton";
 import { ObservationPanel } from "../components/ObservationPanel";
@@ -10,6 +13,8 @@ import { SolvedCode } from "../components/SolvedCode";
 import { StatusBadge } from "../components/StatusBadge";
 import { Tex } from "../components/Tex";
 import { resetProgress, sendHeartbeat } from "../lib/api";
+import { useIsAdmin } from "../lib/admin";
+import { clearDrafts } from "../lib/drafts";
 import { prefersReducedMotion } from "../lib/motion";
 import { toRoman } from "../lib/roman";
 
@@ -22,6 +27,9 @@ type LevelScreenProps = {
   onExit: () => void;
   /** After the settings menu has wiped the player's progress. */
   onWiped: () => void;
+  onFeedback: () => void;
+  onGuide: () => void;
+  onAdmin: () => void;
 };
 
 function Counter({ label, value }: { label: string; value: number }) {
@@ -44,10 +52,13 @@ function FormatCard({ title, body }: { title: string; body: string }) {
 }
 
 /** The level page: query the machine, then submit code that reproduces it. */
-export function LevelScreen({ level, initialProgress, demo, onExit, onWiped }: LevelScreenProps) {
+export function LevelScreen({ level, initialProgress, demo, onExit, onWiped, onFeedback, onGuide, onAdmin }: LevelScreenProps) {
+  const admin = useIsAdmin();
   // The server's word on where the player stands. Every query and submission
   // answers with a fresh copy, which simply replaces this one.
   const [progress, setProgress] = useState(initialProgress);
+  // The feedback card under the observations; the completion panel's Feedback button opens it.
+  const feedbackRef = useRef<FeedbackSectionHandle>(null);
 
   // Time played, for the stats page: a heartbeat every HEARTBEAT_SECONDS
   // while this level is open and its tab is visible. The API stops counting
@@ -138,13 +149,14 @@ export function LevelScreen({ level, initialProgress, demo, onExit, onWiped }: L
           <Counter label="Wrong answers" value={wrongSubmissions} />
           <Counter label="Penalty" value={penalty} />
         </div>
-        <div className="col-start-2 row-start-1 flex items-center gap-3 self-start lg:col-start-3 lg:row-span-2 lg:gap-8 lg:self-end">
+        <div className="col-start-2 row-start-1 flex items-center gap-3 self-start lg:col-start-3 lg:row-span-2 lg:ml-8 lg:self-end">
           <MuteButton />
-          <SettingsMenu onWiped={onWiped} />
+          <SettingsMenu onWiped={onWiped} onFeedback={onFeedback} onAdmin={onAdmin} />
+          <GuideButton onClick={onGuide} />
           <button
             type="button"
             onClick={onExit}
-            className="cursor-pointer rounded-md border border-stone px-4 py-2 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2"
+            className="cursor-pointer rounded-md border border-stone bg-paper px-4 py-2 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2"
           >
             Menu
           </button>
@@ -162,6 +174,8 @@ export function LevelScreen({ level, initialProgress, demo, onExit, onWiped }: L
             log={progress.log}
             onProgress={updateProgress}
           />
+          <FeedbackSection ref={feedbackRef} levelNumber={level.number} />
+          {admin && <AdminLevelFeedbackCard levelNumber={level.number} />}
         </div>
 
         {/* One frame for the right-hand side. When the level is solved, the
@@ -181,6 +195,7 @@ export function LevelScreen({ level, initialProgress, demo, onExit, onWiped }: L
                 language={progress.solvedWith.language}
                 code={progress.solvedWith.code}
                 onBack={() => swapPanel("complete")}
+                onTryAgain={() => swapPanel("editor")}
               />
             )}
             {(rightPanel === "complete" || (rightPanel === "code" && !progress.solvedWith)) && (
@@ -189,10 +204,13 @@ export function LevelScreen({ level, initialProgress, demo, onExit, onWiped }: L
                 solution={progress.solution}
                 onReadCode={() => swapPanel("code")}
                 onTryAgain={() => swapPanel("editor")}
+                onFeedback={() => feedbackRef.current?.reveal()}
                 celebrate={justSolved}
                 onStartAgain={async () => {
                   setProgress(await resetProgress(level.number));
                   setJustSolved(false);
+                  // A fresh editor, with the starter code rather than the saved draft.
+                  clearDrafts(level.id);
                   setEditorKey((key) => key + 1);
                   setRightPanel("editor");
                 }}
@@ -206,6 +224,7 @@ export function LevelScreen({ level, initialProgress, demo, onExit, onWiped }: L
               <HypothesisPanel
                 key={editorKey}
                 levelNumber={level.number}
+                levelId={level.id}
                 onProgress={updateProgress}
                 // On a level solved before, start from the latest solution.
                 initialDraft={editorKey === 0 ? initialProgress.solvedWith : undefined}

@@ -1,40 +1,55 @@
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { excludeFromStats } from "./lib/api";
+import { refreshAdmin } from "./lib/admin";
+import { claimAdmin } from "./lib/api";
 import { prefersReducedMotion } from "./lib/motion";
 import { playSound, preloadSounds } from "./lib/sound";
 import { useLevel, useLevelList } from "./lib/useLevel";
 import { IntroScreen } from "./screens/IntroScreen";
 import { LevelScreen } from "./screens/LevelScreen";
 import { LevelSelectScreen } from "./screens/LevelSelectScreen";
+import { AdminScreen } from "./screens/AdminScreen";
+import { GuideScreen } from "./screens/GuideScreen";
+import { FeedbackScreen } from "./screens/FeedbackScreen";
 import { StatsScreen } from "./screens/StatsScreen";
 
-// No router yet: the app is one of four screens. The intro leads to the
-// level select, which opens a level or the stats page; both return to the
-// select. The demo has a single machine, so it skips the select both ways.
+// No router yet: the app is one of six screens. The intro leads to the
+// level select, which opens a level; a level returns to the select. The
+// demo has a single machine, so it skips the select both ways. The stats
+// page, the guide (the question mark), the feedback page and, for admins,
+// the page of player feedback each remember the screen they were opened
+// from and go back to it.
 type Screen =
   | { name: "intro" }
   | { name: "select" }
   | { name: "level"; number: number }
-  | { name: "stats" };
+  | { name: "stats"; back: Screen }
+  | { name: "feedback"; back: Screen }
+  | { name: "guide"; back: Screen }
+  | { name: "admin"; back: Screen };
 
 /**
- * The `?exclude=<token>` link leaves this browser's player out of global
- * stats. Read once on load, and taken out of the address straight away so
- * it is not bookmarked or shared by accident. Says how it went in a notice.
+ * The `?admin=<token>` link makes this browser's player an admin: left out of
+ * global stats, and able to read every player's feedback. Read once on load,
+ * and taken out of the address straight away so it is not bookmarked or
+ * shared by accident. Says how it went in a notice. Also asks, on load,
+ * whether this player is already an admin.
  */
-function useExcludeLink(): string | null {
+function useAdminLink(): string | null {
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
     const url = new URL(window.location.href);
-    const token = url.searchParams.get("exclude");
-    if (!token) return;
-    url.searchParams.delete("exclude");
+    const token = url.searchParams.get("admin");
+    if (!token) {
+      void refreshAdmin();
+      return;
+    }
+    url.searchParams.delete("admin");
     window.history.replaceState(null, "", url);
-    excludeFromStats(token).then(
-      () => setNotice("This browser is now left out of global stats."),
+    claimAdmin(token).then(
+      () => setNotice("This browser is now an admin."),
       (error: unknown) => setNotice(error instanceof Error ? error.message : String(error)),
-    );
+    ).finally(() => void refreshAdmin());
   }, []);
   // The notice fades after a few seconds.
   useEffect(() => {
@@ -46,7 +61,7 @@ function useExcludeLink(): string | null {
 }
 
 const backButton =
-  "cursor-pointer rounded-md border border-stone px-4 py-2 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2";
+  "cursor-pointer rounded-md border border-stone bg-paper px-4 py-2 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2";
 
 /** Fetches a level, then shows it; meanwhile, a short message. */
 function LevelRoute({
@@ -54,11 +69,17 @@ function LevelRoute({
   demo,
   onExit,
   onWiped,
+  onFeedback,
+  onGuide,
+  onAdmin,
 }: {
   number: number;
   demo: boolean;
   onExit: () => void;
   onWiped: () => void;
+  onFeedback: () => void;
+  onGuide: () => void;
+  onAdmin: () => void;
 }) {
   const level = useLevel(number);
   if (level.status === "ready") {
@@ -69,6 +90,9 @@ function LevelRoute({
         demo={level.demo}
         onExit={onExit}
         onWiped={onWiped}
+        onFeedback={onFeedback}
+        onGuide={onGuide}
+        onAdmin={onAdmin}
       />
     );
   }
@@ -134,8 +158,12 @@ export function App() {
   }, [demo]);
 
   const showIntro = useCallback(() => show({ name: "intro" }), [show]);
-  const showStats = useCallback(() => show({ name: "stats" }), [show]);
-  const notice = useExcludeLink();
+  // Remembers the screen it was opened from, to go back to it.
+  const showStats = useCallback(() => show({ name: "stats", back: current.current }), [show]);
+  const showFeedback = useCallback(() => show({ name: "feedback", back: current.current }), [show]);
+  const showAdmin = useCallback(() => show({ name: "admin", back: current.current }), [show]);
+  const showGuide = useCallback(() => show({ name: "guide", back: current.current }), [show]);
+  const notice = useAdminLink();
   const showSelect = useCallback(() => show({ name: "select" }), [show]);
   // Going into a machine and coming back out each have a sound: C, F, G
   // rising (enter.m4a), then the same falling back home (leave.m4a). Played
@@ -173,12 +201,32 @@ export function App() {
           onStats={showStats}
           onExit={showIntro}
           onWiped={afterWipe}
+          onFeedback={showFeedback}
+          onGuide={showGuide}
+          onAdmin={showAdmin}
         />
       );
       break;
-    case "stats":
-      content = <StatsScreen key={wipes} onBack={showSelect} />;
+    case "stats": {
+      const back = screen.back;
+      content = <StatsScreen key={wipes} onBack={() => show(back)} />;
       break;
+    }
+    case "admin": {
+      const back = screen.back;
+      content = <AdminScreen onBack={() => show(back)} />;
+      break;
+    }
+    case "guide": {
+      const back = screen.back;
+      content = <GuideScreen onBack={() => show(back)} />;
+      break;
+    }
+    case "feedback": {
+      const back = screen.back;
+      content = <FeedbackScreen onBack={() => show(back)} />;
+      break;
+    }
     case "level":
       content = (
         <LevelRoute
@@ -188,6 +236,9 @@ export function App() {
           demo={demo}
           onExit={exitLevel(demo ? showIntro : showSelect)}
           onWiped={afterWipe}
+          onFeedback={showFeedback}
+          onGuide={showGuide}
+          onAdmin={showAdmin}
         />
       );
       break;

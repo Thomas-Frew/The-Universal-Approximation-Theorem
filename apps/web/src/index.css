@@ -130,12 +130,27 @@
 }
 
 /* Everything else (back to the intro, a level or the stats page to the
-   select, and the select to either) is a plain cross-fade, a little slower
-   than the default. */
+   select, the select to either, and the feedback and admin pages to and
+   from the select or a level) is a plain cross-fade, a little slower than the default. */
 ::view-transition-old(level),
 ::view-transition-new(intro),
 ::view-transition-old(stats),
 ::view-transition-new(stats),
+::view-transition-old(feedback),
+::view-transition-new(feedback),
+:root[data-from="feedback"]::view-transition-new(select),
+:root[data-from="feedback"]::view-transition-new(level),
+:root[data-to="feedback"]::view-transition-old(select),
+::view-transition-old(guide),
+::view-transition-new(guide),
+:root[data-from="guide"]::view-transition-new(select),
+:root[data-from="guide"]::view-transition-new(level),
+:root[data-to="guide"]::view-transition-old(select),
+::view-transition-old(admin),
+::view-transition-new(admin),
+:root[data-from="admin"]::view-transition-new(select),
+:root[data-from="admin"]::view-transition-new(level),
+:root[data-to="admin"]::view-transition-old(select),
 :root[data-to="intro"]::view-transition-old(select),
 :root[data-from="level"]::view-transition-new(select),
 :root[data-from="stats"]::view-transition-new(select),

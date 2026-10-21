@@ -5,8 +5,9 @@ import {
   type RunOutcome,
   type SubmissionResult,
 } from "@uat/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { runCode, submitCode } from "../lib/api";
+import { readDrafts, saveDrafts } from "../lib/drafts";
 import { playSound } from "../lib/sound";
 import { LANGUAGE_NAMES, STARTER_CODE } from "../lib/starterCode";
 import { CodeEditor } from "./CodeEditor";
@@ -14,6 +15,8 @@ import { Label } from "./Label";
 
 type HypothesisPanelProps = {
   levelNumber: number;
+  /** The level's uuid, which the saved drafts are kept under. */
+  levelId: string;
   /** The player's progress after every verdict: counters, log and solved state. */
   onProgress: (progress: Progress) => void;
   /** Code to start from instead of the starter code: the latest solution, on a solved level. */
@@ -89,15 +92,28 @@ function describe(result: SubmissionResult): Status {
 /** The right-hand panel: pick a language, write the code, run or submit it. */
 export function HypothesisPanel({
   levelNumber,
+  levelId,
   onProgress,
   initialDraft,
   onShowSolution,
 }: HypothesisPanelProps) {
-  const [language, setLanguage] = useState<Language>(initialDraft?.language ?? "cpp");
+  // Where the editor starts: the code this browser last had here, if any;
+  // otherwise the latest solution, if given; otherwise the starter code.
+  // Read once, on mount.
+  const [saved] = useState(() => readDrafts(levelId));
+  const [language, setLanguage] = useState<Language>(
+    saved?.language ?? initialDraft?.language ?? "cpp",
+  );
   // One draft per language, so switching language does not lose your work.
   const [drafts, setDrafts] = useState(() =>
-    initialDraft ? { ...STARTER_CODE, [initialDraft.language]: initialDraft.code } : STARTER_CODE,
+    saved
+      ? { ...STARTER_CODE, ...saved.drafts }
+      : initialDraft
+        ? { ...STARTER_CODE, [initialDraft.language]: initialDraft.code }
+        : STARTER_CODE,
   );
+  // Every change is saved, so leaving the level and coming back keeps it.
+  useEffect(() => saveDrafts(levelId, { language, drafts }), [levelId, language, drafts]);
   // Which button is waiting on the judge, if any. Only one at a time.
   const [busy, setBusy] = useState<"run" | "submit" | null>(null);
   const [status, setStatus] = useState<Status>({
@@ -210,51 +226,55 @@ export function HypothesisPanel({
               : "Write the logic you believe the machine follows."}
           </p>
         </div>
-        {onShowSolution && (
-          <button
-            type="button"
-            onClick={onShowSolution}
-            className="cursor-pointer rounded-md border border-stone bg-paper px-4 py-2 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2"
-          >
-            Solution
-          </button>
-        )}
-        <label className="flex items-center gap-3">
-          <span className="text-xs tracking-label text-taupe uppercase">
-            Language
-          </span>
-          {/* The browser's own arrow cannot be spaced, so it is hidden
-              (appearance-none) and drawn here instead, with room around it. */}
-          <span className="relative">
-            <select
-              value={language}
-              onChange={(event) =>
-                setLanguage(languageSchema.parse(event.target.value))
-              }
-              className="cursor-pointer appearance-none rounded-md border border-stone bg-paper py-2 pr-10 pl-3 font-mono text-sm outline-offset-2 outline-walnut focus-visible:outline-2"
+        {/* Language, then Solution to its right. `items-stretch` gives the
+            button the selector's height, whatever the font sizes. */}
+        <div className="flex items-stretch gap-3">
+          <label className="flex items-center gap-3">
+            <span className="text-xs tracking-label text-taupe uppercase">
+              Language
+            </span>
+            {/* The browser's own arrow cannot be spaced, so it is hidden
+                (appearance-none) and drawn here instead, with room around it. */}
+            <span className="relative">
+              <select
+                value={language}
+                onChange={(event) =>
+                  setLanguage(languageSchema.parse(event.target.value))
+                }
+                className="cursor-pointer appearance-none rounded-md border border-stone bg-paper py-2 pr-10 pl-3 font-mono text-sm outline-offset-2 outline-walnut focus-visible:outline-2"
+              >
+                {languageSchema.options.map((option) => (
+                  <option key={option} value={option}>
+                    {LANGUAGE_NAMES[option]}
+                  </option>
+                ))}
+              </select>
+              <svg
+                viewBox="0 0 10 6"
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 right-3 w-2.5 -translate-y-1/2 text-taupe"
+              >
+                <path
+                  d="M1 1l4 4 4-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+          </label>
+          {onShowSolution && (
+            <button
+              type="button"
+              onClick={onShowSolution}
+              className="flex cursor-pointer items-center rounded-md border border-stone bg-paper px-4 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2"
             >
-              {languageSchema.options.map((option) => (
-                <option key={option} value={option}>
-                  {LANGUAGE_NAMES[option]}
-                </option>
-              ))}
-            </select>
-            <svg
-              viewBox="0 0 10 6"
-              aria-hidden="true"
-              className="pointer-events-none absolute top-1/2 right-3 w-2.5 -translate-y-1/2 text-taupe"
-            >
-              <path
-                d="M1 1l4 4 4-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
-        </label>
+              Solution
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="relative mt-4 flex-1 overflow-hidden rounded-md border border-stone focus-within:border-walnut">

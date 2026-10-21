@@ -9,6 +9,8 @@ type LevelCompleteProps = {
   onReadCode: () => void;
   /** Back to the editor, to query and submit again (the penalty stays frozen). */
   onTryAgain: () => void;
+  /** Opens the feedback card under the observations. */
+  onFeedback: () => void;
   /**
    * Solved just now, on this screen: draw the panel in (see "Solving a level"
    * in index.css). Otherwise it simply appears, e.g. when reopening the demo.
@@ -26,7 +28,7 @@ const buttonBase =
  * a way to read back the code that solved it. The left panel stays, so the
  * player can still look back over their observations.
  */
-export function LevelComplete({ demo, solution, celebrate, onReadCode, onTryAgain, onStartAgain }: LevelCompleteProps) {
+export function LevelComplete({ demo, solution, celebrate, onReadCode, onTryAgain, onFeedback, onStartAgain }: LevelCompleteProps) {
   // Starting again erases the player's log and submissions, so it takes two
   // clicks: the first asks, the second does it.
   const [step, setStep] = useState<"idle" | "confirm" | "working">("idle");
@@ -116,6 +118,14 @@ export function LevelComplete({ demo, solution, celebrate, onReadCode, onTryAgai
               className={`${buttonBase} border-stone bg-paper hover:bg-linen`}
             >
               Try again
+            </button>
+            {/* Asked for once solved, when the player has seen the whole machine. */}
+            <button
+              type="button"
+              onClick={onFeedback}
+              className={`${buttonBase} border-stone bg-paper hover:bg-linen`}
+            >
+              Feedback
             </button>
             {demo && (
               <button

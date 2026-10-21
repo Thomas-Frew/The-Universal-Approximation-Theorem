@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useIsAdmin } from "../lib/admin";
 import { wipeProgress } from "../lib/api";
 import { isMuted, subscribeMuted, toggleMuted } from "../lib/sound";
 
 type SettingsMenuProps = {
   /** Called once the player's progress is gone, to show the game from the start. */
   onWiped: () => void;
+  /** Opens the page for feedback on the whole game. */
+  onFeedback: () => void;
+  /** Opens the admin page of player feedback; offered to admins only. */
+  onAdmin: () => void;
 };
 
 const rowButton =
@@ -12,10 +17,12 @@ const rowButton =
 
 /**
  * A gear that opens a small menu: sound on or off (the same setting as the
- * speaker button), and wiping the player's progress. Closes on a click
+ * speaker button), a way to the feedback page, and wiping the player's
+ * progress. Closes on a click
  * outside it or on Escape.
  */
-export function SettingsMenu({ onWiped }: SettingsMenuProps) {
+export function SettingsMenu({ onWiped, onFeedback, onAdmin }: SettingsMenuProps) {
+  const admin = useIsAdmin();
   const [open, setOpen] = useState(false);
   const muted = useSyncExternalStore(subscribeMuted, isMuted);
   // Wiping takes two clicks: the first asks, the second does it.
@@ -67,7 +74,7 @@ export function SettingsMenu({ onWiped }: SettingsMenuProps) {
         aria-haspopup="true"
         aria-label="Settings"
         title="Settings"
-        className="flex size-9 cursor-pointer items-center justify-center rounded-md border border-stone text-taupe outline-offset-4 outline-walnut hover:bg-linen hover:text-ink focus-visible:outline-2"
+        className="flex size-9 cursor-pointer items-center justify-center rounded-md border border-stone bg-paper text-taupe outline-offset-4 outline-walnut hover:bg-linen hover:text-ink focus-visible:outline-2"
       >
         {/* A gear: eight teeth evenly spaced around (10, 10), worked out
             rather than drawn by hand so it is exactly symmetric. */}
@@ -101,6 +108,36 @@ export function SettingsMenu({ onWiped }: SettingsMenuProps) {
               {muted ? "Off" : "On"}
             </button>
           </div>
+
+          <div className="mt-4 flex items-center justify-between gap-4 border-t border-stone pt-4">
+            <span className="text-sm">Feedback</span>
+            <button
+              type="button"
+              onClick={() => {
+                close();
+                onFeedback();
+              }}
+              className={`${rowButton} border-stone bg-paper hover:bg-linen`}
+            >
+              Write
+            </button>
+          </div>
+
+          {admin && (
+            <div className="mt-4 flex items-center justify-between gap-4 border-t border-stone pt-4">
+              <span className="text-sm">Player feedback</span>
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  onAdmin();
+                }}
+                className={`${rowButton} border-brass bg-paper hover:bg-linen`}
+              >
+                Read
+              </button>
+            </div>
+          )}
 
           <div className="mt-4 border-t border-stone pt-4">
             {wipe === "idle" ? (

@@ -1,6 +1,11 @@
 import { zValidator } from "@hono/zod-validator";
 import {
-  excludeRequestSchema,
+  type AdminFeedbackResponse,
+  adminRequestSchema,
+  type Feedback,
+  feedbackSchema,
+  type GameFeedback,
+  gameFeedbackSchema,
   type Level,
   type LevelSummary,
   type Progress,
@@ -44,13 +49,22 @@ export type GameDependencies = {
   run: (userId: string, level: Level, submission: SubmissionRequest) => Promise<RunResult>;
   resetProgress: (userId: string, level: Level) => Promise<Progress>;
   wipeProgress: (userId: string) => Promise<void>;
+  getFeedback: (userId: string, level: Level) => Promise<Feedback | null>;
+  saveFeedback: (userId: string, level: Level, feedback: Feedback) => Promise<void>;
+  sendGameFeedback: (userId: string, feedback: GameFeedback) => Promise<void>;
   heartbeat: (userId: string, level: Level) => Promise<void>;
 };
 
 /** The stats page, from `stats.ts`. */
 export type StatsDependencies = {
   getStats: (userId: string) => Promise<StatsResponse>;
-  exclude: (userId: string, token: string) => Promise<void>;
+};
+
+/** Admins and what only they may read, from `admin.ts`. */
+export type AdminDependencies = {
+  isAdmin: (userId: string) => Promise<boolean>;
+  claim: (userId: string, token: string) => Promise<void>;
+  getFeedback: () => Promise<AdminFeedbackResponse>;
 };
 
 /** Values the middleware attaches to each request, read with `c.get(...)`. */
@@ -64,6 +78,7 @@ export type AppDependencies = {
   demo: boolean;
   game: GameDependencies;
   stats: StatsDependencies;
+  admin: AdminDependencies;
 };
 
 /**
@@ -71,13 +86,22 @@ export type AppDependencies = {
  * database) is passed in, so the web app can import `AppType` without pulling
  * in Node types.
  */
-export function createApp({ auth, levels, demo, game, stats }: AppDependencies) {
+export function createApp({ auth, levels, demo, game, stats, admin }: AppDependencies) {
   const requirePlayer = createMiddleware<{ Variables: Variables }>(async (c, next) => {
     const userId = await auth.getUserId(c.req.raw.headers);
     if (!userId) {
       return c.json({ error: "No session. Reload the page to start one." }, 401);
     }
     c.set("userId", userId);
+    await next();
+  });
+
+  // After requirePlayer. Checked against the database on every request, so
+  // only the server decides who is an admin.
+  const requireAdmin = createMiddleware<{ Variables: Variables }>(async (c, next) => {
+    if (!(await admin.isAdmin(c.get("userId")))) {
+      return c.json({ error: "Admins only." }, 403);
+    }
     await next();
   });
 
@@ -119,10 +143,21 @@ export function createApp({ auth, levels, demo, game, stats }: AppDependencies) 
     // The stats page.
     .use("/stats", requirePlayer)
     .get("/stats", async (c) => c.json(await stats.getStats(c.get("userId")), 200))
-    // The `?exclude=` link: leave this player out of global stats.
     .use("/me/*", requirePlayer)
-    .post("/me/exclude", zValidator("json", excludeRequestSchema), async (c) => {
-      await stats.exclude(c.get("userId"), c.req.valid("json").token);
+    // Whether this player is an admin, so the browser knows what to show.
+    .get("/me/admin", async (c) => c.json({ admin: await admin.isAdmin(c.get("userId")) }, 200))
+    // The `?admin=` link: make this player an admin (and so leave them out of global stats).
+    .post("/me/admin", zValidator("json", adminRequestSchema), async (c) => {
+      await admin.claim(c.get("userId"), c.req.valid("json").token);
+      return c.json({ ok: true as const }, 200);
+    })
+    // Admins only: everything players have said.
+    .use("/admin/*", requirePlayer, requireAdmin)
+    .get("/admin/feedback", async (c) => c.json(await admin.getFeedback(), 200))
+    // Feedback on the game as a whole, from the settings menu. A POST, not a
+    // PUT: each one is a new message, never a replacement.
+    .post("/me/feedback", zValidator("json", gameFeedbackSchema), async (c) => {
+      await game.sendGameFeedback(c.get("userId"), c.req.valid("json"));
       return c.json({ ok: true as const }, 200);
     })
     .use("/levels/*", requirePlayer)
@@ -155,6 +190,14 @@ export function createApp({ auth, levels, demo, game, stats }: AppDependencies) 
     .post("/levels/:number/runs", zValidator("json", runRequestSchema), async (c) =>
       c.json(await game.run(c.get("userId"), c.get("level"), c.req.valid("json")), 200),
     )
+    // A player's feedback on a level, solved or not: read it back, or send it.
+    .get("/levels/:number/feedback", async (c) =>
+      c.json({ feedback: await game.getFeedback(c.get("userId"), c.get("level")) }, 200),
+    )
+    .put("/levels/:number/feedback", zValidator("json", feedbackSchema), async (c) => {
+      await game.saveFeedback(c.get("userId"), c.get("level"), c.req.valid("json"));
+      return c.json({ ok: true as const }, 200);
+    })
     // Start the level afresh. Demo only: in the full game it would let a
     // player wipe a bad penalty.
     .delete("/levels/:number/progress", async (c) => {

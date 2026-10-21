@@ -42,7 +42,7 @@ const machineStatSchema = levelRefSchema.extend({
  * queries, wrong answers and time after solving are not counted.
  *
  * "Mean" figures are over every player except those excluded from global
- * stats (the author and testers), and `null` until there is anyone to average.
+ * stats (admins: the author and testers), and `null` until there is anyone to average.
  */
 export const statsResponseSchema = z.object({
   totals: z.object({
@@ -71,6 +71,3 @@ export const statsResponseSchema = z.object({
   machines: z.array(machineStatSchema),
 });
 export type StatsResponse = z.infer<typeof statsResponseSchema>;
-
-/** `POST /me/exclude`: the secret from the `?exclude=` link. */
-export const excludeRequestSchema = z.object({ token: z.string().min(1).max(200) });

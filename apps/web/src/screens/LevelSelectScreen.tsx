@@ -1,6 +1,7 @@
 import { DIFFICULTY_SCALE, isExtended, type LevelSummary, penaltyOf } from "@uat/shared";
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Label } from "../components/Label";
+import { GuideButton } from "../components/GuideButton";
 import { MuteButton } from "../components/MuteButton";
 import { SettingsMenu } from "../components/SettingsMenu";
 import { StatusBadge } from "../components/StatusBadge";
@@ -14,6 +15,9 @@ type LevelSelectScreenProps = {
   onExit: () => void;
   /** After the settings menu has wiped the player's progress. */
   onWiped: () => void;
+  onFeedback: () => void;
+  onGuide: () => void;
+  onAdmin: () => void;
 };
 
 // The grid's measurements, in pixels. The page size is however many cards of
@@ -25,7 +29,7 @@ const MIN_CARD_WIDTH = 230;
 const MAX_COLUMNS = 6;
 
 const buttonBase =
-  "cursor-pointer rounded-md border border-stone px-4 py-2 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent";
+  "cursor-pointer rounded-md border border-stone bg-paper px-4 py-2 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent";
 
 /** How many columns and rows of cards fit in the element, kept up to date as it resizes. */
 function useGridCapacity(ref: RefObject<HTMLElement | null>) {
@@ -137,7 +141,7 @@ function LevelCard({ level, onOpen }: { level: LevelSummary; onOpen: () => void 
 }
 
 /** The level select: every machine as a card, a page at a time, sized to the screen. */
-export function LevelSelectScreen({ onOpen, onStats, onExit, onWiped }: LevelSelectScreenProps) {
+export function LevelSelectScreen({ onOpen, onStats, onExit, onWiped, onFeedback, onGuide, onAdmin }: LevelSelectScreenProps) {
   const list = useLevelList();
   const gridRef = useRef<HTMLDivElement>(null);
   const { columns, rows } = useGridCapacity(gridRef);
@@ -177,11 +181,11 @@ export function LevelSelectScreen({ onOpen, onStats, onExit, onWiped }: LevelSel
     // Exactly one screen tall: the grid takes what the header and pager leave.
     <main className="mx-auto flex h-dvh max-w-[min(104rem,94vw)] flex-col py-10 [view-transition-name:select]">
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-8 border-b border-stone pb-4 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
-        <div className="col-start-1 row-start-1">
+        <div className="col-span-2 row-start-2 lg:col-span-1 lg:row-start-1">
           <Label>The Universal Approximation Theorem</Label>
         </div>
-        <h1 className="col-span-2 row-start-2 text-4xl font-bold lg:col-span-1">Machines</h1>
-        <div className="col-span-2 row-start-3 mt-4 flex gap-8 lg:col-span-1 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0">
+        <h1 className="col-span-2 row-start-3 text-4xl font-bold lg:col-span-1 lg:row-start-2">Machines</h1>
+        <div className="col-span-2 row-start-4 mt-4 flex gap-8 lg:col-span-1 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0">
           <div className="flex flex-col items-start whitespace-nowrap lg:items-end">
             <Label>Solved</Label>
             <span className="font-mono text-2xl">
@@ -193,9 +197,10 @@ export function LevelSelectScreen({ onOpen, onStats, onExit, onWiped }: LevelSel
             <span className="font-mono text-2xl">{totalPenalty}</span>
           </div>
         </div>
-        <div className="col-start-2 row-start-1 flex items-center gap-3 self-start lg:col-start-3 lg:row-span-2 lg:gap-8 lg:self-end">
+        <div className="col-span-2 row-start-1 mb-4 flex items-center gap-3 lg:col-span-1 lg:col-start-3 lg:row-span-2 lg:mb-0 lg:ml-8 lg:self-end">
           <MuteButton />
-          <SettingsMenu onWiped={onWiped} />
+          <SettingsMenu onWiped={onWiped} onFeedback={onFeedback} onAdmin={onAdmin} />
+          <GuideButton onClick={onGuide} />
           <button type="button" onClick={onStats} className={buttonBase}>
             Stats
           </button>

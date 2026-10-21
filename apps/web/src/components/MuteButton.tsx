@@ -13,7 +13,7 @@ export function MuteButton() {
       aria-pressed={muted}
       aria-label={label}
       title={label}
-      className="flex size-9 cursor-pointer items-center justify-center rounded-md border border-stone text-taupe outline-offset-4 outline-walnut hover:bg-linen hover:text-ink focus-visible:outline-2"
+      className="flex size-9 cursor-pointer items-center justify-center rounded-md border border-stone bg-paper text-taupe outline-offset-4 outline-walnut hover:bg-linen hover:text-ink focus-visible:outline-2"
     >
       <svg
         viewBox="0 0 20 20"

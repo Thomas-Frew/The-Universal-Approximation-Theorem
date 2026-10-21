@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import {
+  type Feedback,
+  type GameFeedback,
   HEARTBEAT_SECONDS,
   type Level,
   LEVEL_RULES,
@@ -15,7 +17,7 @@ import {
 } from "@uat/shared";
 import { and, asc, count, countDistinct, eq, sql } from "drizzle-orm";
 import type { Database } from "./db/index.ts";
-import { machineAnswers, observations, playTime, submissions } from "./db/schema.ts";
+import { feedback, gameFeedback, machineAnswers, observations, playTime, submissions } from "./db/schema.ts";
 import { GameError } from "./errors.ts";
 import { createGate } from "./gate.ts";
 import type { Judge } from "./judge.ts";
@@ -85,6 +87,12 @@ const MAX_JUDGE_JOBS = 10;
  */
 const MAX_QUERIES_PER_LEVEL = 500;
 
+/**
+ * Messages one player may send about the whole game. Each is a new row, so
+ * this bounds what one session can add; nobody honest gets near it.
+ */
+const MAX_GAME_FEEDBACK = 50;
+
 /** Matches inputs in the database. Inputs can be too long to index directly. */
 const hashInput = (input: string) => createHash("sha256").update(input).digest("hex");
 
@@ -126,7 +134,7 @@ export function createGame({
 
   /** Rows for this player on this level's current version. */
   const mine = (
-    table: typeof observations | typeof submissions | typeof playTime,
+    table: typeof observations | typeof submissions | typeof playTime | typeof feedback,
     userId: string,
     level: Level,
   ) =>
@@ -427,6 +435,52 @@ export function createGame({
     });
   }
 
+  /** What this player last said about this version of the level, or null. */
+  async function getFeedback(userId: string, level: Level): Promise<Feedback | null> {
+    const [row] = await db
+      .select({
+        understanding: feedback.understanding,
+        implementation: feedback.implementation,
+        overall: feedback.overall,
+        comment: feedback.comment,
+      })
+      .from(feedback)
+      .where(mine(feedback, userId, level));
+    return row ?? null;
+  }
+
+  /**
+   * Saves a player's feedback, replacing any they sent before for this
+   * version. Records whether they had solved the level at the time.
+   */
+  async function saveFeedback(userId: string, level: Level, sent: Feedback): Promise<void> {
+    const { status } = await getProgress(userId, level);
+    const values = { ...sent, solved: status === "solved", updatedAt: new Date() };
+    await db
+      .insert(feedback)
+      .values({ userId, levelId: level.id, levelVersion: level.version, ...values })
+      .onConflictDoUpdate({
+        target: [feedback.userId, feedback.levelId, feedback.levelVersion],
+        set: values,
+      });
+  }
+
+  /**
+   * Keeps a message about the whole game. Unlike level feedback it never
+   * replaces an earlier one: each send is a new row. Like the query cap, two
+   * sends at once can both pass the count; approximate is enough.
+   */
+  async function sendGameFeedback(userId: string, sent: GameFeedback): Promise<void> {
+    const [made] = await db
+      .select({ sent: count() })
+      .from(gameFeedback)
+      .where(eq(gameFeedback.userId, userId));
+    if ((made?.sent ?? 0) >= MAX_GAME_FEEDBACK) {
+      throw new GameError(429, "That is the limit of feedback for now. Thank you for all of it.");
+    }
+    await db.insert(gameFeedback).values({ userId, ...sent });
+  }
+
   async function resetProgress(userId: string, level: Level): Promise<Progress> {
     await db.transaction(async (tx) => {
       await tx.delete(observations).where(mine(observations, userId, level));
@@ -482,6 +536,9 @@ export function createGame({
     run,
     resetProgress,
     wipeProgress,
+    getFeedback,
+    saveFeedback,
+    sendGameFeedback,
     heartbeat,
     releaseStuckSubmissions,
   };
