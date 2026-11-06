@@ -4,8 +4,40 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>The Universal Approximation Theorem</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+    <meta name="description" content="Probe a black-box machine, watch what it answers, then write the code that reproduces it." />
+    <!-- Link previews (Discord, Slack, iMessage, X). og:image must be a full
+         address; both deployments serve the same file, so the main domain's
+         copy serves the demo too. `summary` shows it as a small square beside
+         the text rather than a wide banner. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="The Universal Approximation Theorem" />
+    <meta property="og:title" content="The Universal Approximation Theorem" />
+    <meta property="og:description" content="Probe a black-box machine, watch what it answers, then write the code that reproduces it." />
+    <meta property="og:image" content="https://universal-approximation.com/og-image.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:alt" content="The game's logo: an owl's face" />
+    <meta name="twitter:card" content="summary" />
+    <!-- The owl, or the owl inverted for Coffee: swapped with the theme (`brand` in src/lib/theme.ts). -->
+    <link id="favicon" rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Phone browsers colour their address bar with this. Paper's page colour
+         to start; src/lib/theme.ts sets the theme's own once it loads. -->
+    <meta name="theme-color" content="#f7f2ea" />
+    <!-- The theme, set before the first paint so a Coffee player never sees a
+         flash of Paper, nor a light icon in the tab. The same rule as readTheme
+         in src/lib/theme.ts. -->
+    <script>
+      try {
+        var saved = localStorage.getItem("uat:theme");
+        var theme =
+          saved === "paper" || saved === "coffee"
+            ? saved
+            : matchMedia("(prefers-color-scheme: dark)").matches ? "coffee" : "paper";
+        document.documentElement.dataset.theme = theme;
+        if (theme === "coffee") document.getElementById("favicon").href = "/favicon-dark.png";
+      } catch (error) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

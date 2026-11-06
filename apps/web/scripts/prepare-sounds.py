@@ -30,7 +30,7 @@ from pathlib import Path
 WEB = Path(__file__).resolve().parent.parent
 SOURCES = WEB / "audio"
 OUTPUT = WEB / "src" / "assets" / "sounds"
-NAMES = ["query", "unknown", "correct", "wrong"]
+NAMES = ["query", "unknown", "correct", "wrong", "enter", "leave", "title", "unmute"]
 SILENCE_DBFS = -50   # quieter than this counts as silence
 TAIL_SECONDS = 0.2   # kept, and faded, after the sound ends
 PEAK_DBFS = -1.0     # the loudest peak across all sounds, after the gain

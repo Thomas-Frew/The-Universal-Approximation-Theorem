@@ -3,20 +3,53 @@ import {
   languageSchema,
   type Progress,
   type RunOutcome,
+  type RuntimeError,
   type SubmissionResult,
 } from "@uat/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { runCode, submitCode } from "../lib/api";
+import { readDrafts, readPreferredLanguage, saveDrafts, savePreferredLanguage } from "../lib/drafts";
 import { playSound } from "../lib/sound";
-import { LANGUAGE_NAMES, STARTER_CODE } from "../lib/starterCode";
+import { LANGUAGE_NAMES, starterCodeFor } from "../lib/starterCode";
 import { CodeEditor } from "./CodeEditor";
 import { Label } from "./Label";
 
 type HypothesisPanelProps = {
   levelNumber: number;
+  /** The level's uuid, which the saved drafts are kept under. */
+  levelId: string;
   /** The player's progress after every verdict: counters, log and solved state. */
   onProgress: (progress: Progress) => void;
+  /** Code to start from instead of the starter code: the latest solution, on a solved level. */
+  initialDraft?: { language: Language; code: string };
+  /** Present once the level is solved: back to the completion panel. */
+  onShowSolution?: () => void;
 };
+
+/**
+ * A runtime error in the table of differences: "Line 5: ZeroDivisionError:
+ * division by zero", the line a button that marks it in the editor again.
+ * Without a line (a C++ crash), just the error.
+ */
+function RuntimeErrorNote({ error, onShowLine }: { error: RuntimeError; onShowLine: (line: number) => void }) {
+  return (
+    <>
+      {error.line !== null && (
+        <>
+          <button
+            type="button"
+            onClick={() => onShowLine(error.line!)}
+            className="cursor-pointer underline decoration-dotted underline-offset-2 outline-offset-2 outline-walnut hover:decoration-solid focus-visible:outline-2"
+          >
+            Line {error.line}
+          </button>
+          {": "}
+        </>
+      )}
+      {error.message}
+    </>
+  );
+}
 
 type Status = {
   tone: "neutral" | "success" | "error";
@@ -28,8 +61,8 @@ type Status = {
 };
 
 const OUTCOME_NOTES: Partial<Record<RunOutcome["verdict"], string>> = {
-  runtime_error: "runtime error",
-  time_limit: "time limit exceeded",
+  runtime_error: "Runtime Error",
+  time_limit: "Time Limit Exceeded",
 };
 
 const buttonBase =
@@ -72,21 +105,47 @@ function describe(result: SubmissionResult): Status {
     case "accepted":
       return { tone: "success", text: "Accepted." };
     case "compile_error":
-      return { tone: "error", text: "Compilation error.", detail: result.message };
+      return { tone: "error", text: "Compilation Error.", detail: result.message };
     case "wrong_answer":
-      return { tone: "error", text: "Wrong answer. The failing case has been added to your observations." };
+      return { tone: "error", text: "Wrong Answer. The failing case has been added to your observations." };
     case "runtime_error":
-      return { tone: "error", text: "Runtime error. The failing case has been added to your observations." };
+      return { tone: "error", text: "Runtime Error. The failing case has been added to your observations." };
     case "time_limit":
-      return { tone: "error", text: "Time limit exceeded. The failing case has been added to your observations." };
+      return { tone: "error", text: "Time Limit Exceeded. The failing case has been added to your observations." };
   }
 }
 
 /** The right-hand panel: pick a language, write the code, run or submit it. */
-export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProps) {
-  const [language, setLanguage] = useState<Language>("cpp");
+export function HypothesisPanel({
+  levelNumber,
+  levelId,
+  onProgress,
+  initialDraft,
+  onShowSolution,
+}: HypothesisPanelProps) {
+  // Where the editor starts: the code this browser last had here, if any;
+  // otherwise the latest solution, if given; otherwise the starter code (on
+  // the first machine; the rest start empty). Read once, on mount.
+  const [saved] = useState(() => readDrafts(levelId));
+  const [language, setLanguage] = useState<Language>(
+    // The language last chosen in this browser, on every machine, old or new;
+    // before any choice, this machine's own last one, else its solution's, else
+    // C++. Each language keeps its own draft, so nothing is lost either way.
+    () => readPreferredLanguage() ?? saved?.language ?? initialDraft?.language ?? "cpp",
+  );
   // One draft per language, so switching language does not lose your work.
-  const [drafts, setDrafts] = useState(STARTER_CODE);
+  const [drafts, setDrafts] = useState(() => {
+    const starter = starterCodeFor(levelNumber);
+    return saved
+      ? { ...starter, ...saved.drafts }
+      : initialDraft
+        ? { ...starter, [initialDraft.language]: initialDraft.code }
+        : starter;
+  });
+  // Nothing to run or judge yet (the API refuses empty code).
+  const blank = drafts[language].trim() === "";
+  // Every change is saved, so leaving the level and coming back keeps it.
+  useEffect(() => saveDrafts(levelId, { language, drafts }), [levelId, language, drafts]);
   // Which button is waiting on the judge, if any. Only one at a time.
   const [busy, setBusy] = useState<"run" | "submit" | null>(null);
   const [status, setStatus] = useState<Status>({
@@ -94,12 +153,20 @@ export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProp
     text: "Not yet run.",
   });
 
-  // Hides the compiler output or the table of differences, keeping the status line.
-  const closeDetails = () =>
-    setStatus(({ tone, text }) => ({ tone, text }));
+  // The editor line a runtime error points at, marked until the code changes.
+  const [errorLine, setErrorLine] = useState<{ line: number } | null>(null);
 
-  const setCode = (code: string) =>
+  // Hides the compiler output or the table of differences, keeping the status line.
+  const closeDetails = () => {
+    setStatus(({ tone, text }) => ({ tone, text }));
+    setErrorLine(null);
+  };
+
+  // Also called when the editor's text is swapped for another language's.
+  const setCode = (code: string) => {
     setDrafts((previous) => ({ ...previous, [language]: code }));
+    setErrorLine(null);
+  };
 
   // Shared by both buttons: show progress, do the work, report a failure to
   // reach the judge. No verdict means nothing is counted against the player.
@@ -107,8 +174,13 @@ export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProp
     if (busy) return;
     setBusy(action);
     setStatus({ tone: "neutral", text: action === "run" ? "Running…" : "Judging…" });
+    setErrorLine(null);
     try {
-      setStatus(await work());
+      const next = await work();
+      setStatus(next);
+      // Like LeetCode: point at the line of the first runtime error that has one.
+      const line = next.mismatches?.find((outcome) => outcome.error?.line)?.error?.line;
+      setErrorLine(line ? { line } : null);
     } catch (error) {
       setStatus({
         tone: "error",
@@ -125,7 +197,7 @@ export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProp
   const checkAgainstLog = async (code: string): Promise<Status> => {
     const result = await runCode(levelNumber, language, code);
     if (result.status === "compile_error") {
-      return { tone: "error", text: "Compilation error.", detail: result.message };
+      return { tone: "error", text: "Compilation Error.", detail: result.message };
     }
     const mismatches = result.outcomes.filter((outcome) => outcome.verdict !== "passed");
     const total = result.outcomes.length;
@@ -192,51 +264,68 @@ export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProp
       {/* The language picker drops below the heading when there is no room beside it. */}
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div>
-          <h2 className="text-xl italic">Your hypothesis</h2>
+          <h2 className="text-xl italic">Your Hypothesis</h2>
           <p className="mt-1 text-sm text-taupe">
-            Write the logic you believe the machine follows.
+            {onShowSolution
+              ? "Solved. Your penalty is settled; try again as you like."
+              : "Write the logic you believe the machine follows."}
           </p>
         </div>
-        <label className="flex items-center gap-3">
-          <span className="text-xs tracking-label text-taupe uppercase">
-            Language
-          </span>
-          {/* The browser's own arrow cannot be spaced, so it is hidden
-              (appearance-none) and drawn here instead, with room around it. */}
-          <span className="relative">
-            <select
-              value={language}
-              onChange={(event) =>
-                setLanguage(languageSchema.parse(event.target.value))
-              }
-              className="cursor-pointer appearance-none rounded-md border border-stone bg-paper py-2 pr-10 pl-3 font-mono text-sm outline-offset-2 outline-walnut focus-visible:outline-2"
+        {/* Language, then Solution to its right. `items-stretch` gives the
+            button the selector's height, whatever the font sizes. */}
+        <div className="flex items-stretch gap-3">
+          <label className="flex items-center gap-3">
+            <span className="text-xs tracking-label text-taupe uppercase">
+              Language
+            </span>
+            {/* The browser's own arrow cannot be spaced, so it is hidden
+                (appearance-none) and drawn here instead, with room around it. */}
+            <span className="relative">
+              <select
+                value={language}
+                onChange={(event) => {
+                  const chosen = languageSchema.parse(event.target.value);
+                  setLanguage(chosen);
+                  savePreferredLanguage(chosen);
+                }}
+                className="cursor-pointer appearance-none rounded-md border border-stone bg-paper py-2 pr-10 pl-3 font-mono text-sm outline-offset-2 outline-walnut focus-visible:outline-2"
+              >
+                {languageSchema.options.map((option) => (
+                  <option key={option} value={option}>
+                    {LANGUAGE_NAMES[option]}
+                  </option>
+                ))}
+              </select>
+              <svg
+                viewBox="0 0 10 6"
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 right-3 w-2.5 -translate-y-1/2 text-taupe"
+              >
+                <path
+                  d="M1 1l4 4 4-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+          </label>
+          {onShowSolution && (
+            <button
+              type="button"
+              onClick={onShowSolution}
+              className="flex cursor-pointer items-center rounded-md border border-stone bg-paper px-4 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2"
             >
-              {languageSchema.options.map((option) => (
-                <option key={option} value={option}>
-                  {LANGUAGE_NAMES[option]}
-                </option>
-              ))}
-            </select>
-            <svg
-              viewBox="0 0 10 6"
-              aria-hidden="true"
-              className="pointer-events-none absolute top-1/2 right-3 w-2.5 -translate-y-1/2 text-taupe"
-            >
-              <path
-                d="M1 1l4 4 4-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
-        </label>
+              Solution
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="relative mt-4 flex-1 overflow-hidden rounded-md border border-stone focus-within:border-walnut">
-        <CodeEditor language={language} value={drafts[language]} onChange={setCode} />
+        <CodeEditor language={language} value={drafts[language]} onChange={setCode} errorLine={errorLine} />
       </div>
 
       {status.detail && (
@@ -276,7 +365,11 @@ export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProp
                       {outcome.expected.trimEnd()}
                     </td>
                     <td className="py-1 whitespace-pre-wrap text-oxblood">
-                      {OUTCOME_NOTES[outcome.verdict] ?? outcome.actual.trimEnd()}
+                      {outcome.error ? (
+                        <RuntimeErrorNote error={outcome.error} onShowLine={(line) => setErrorLine({ line })} />
+                      ) : (
+                        (OUTCOME_NOTES[outcome.verdict] ?? outcome.actual.trimEnd())
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -293,7 +386,7 @@ export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProp
         <button
           type="button"
           onClick={() => void run()}
-          disabled={busy !== null}
+          disabled={busy !== null || blank}
           className={`${buttonBase} border-stone bg-paper hover:bg-linen`}
         >
           {busy === "run" ? "Running" : "Run"}
@@ -301,7 +394,7 @@ export function HypothesisPanel({ levelNumber, onProgress }: HypothesisPanelProp
         <button
           type="button"
           onClick={() => void submit()}
-          disabled={busy !== null}
+          disabled={busy !== null || blank}
           className={`${buttonBase} border-walnut bg-walnut text-paper hover:bg-ink`}
         >
           {busy === "submit" ? "Judging" : "Submit"}

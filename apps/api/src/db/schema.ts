@@ -1,7 +1,9 @@
-import { LANGUAGES } from "@uat/shared";
+import { LANGUAGES, SUBMISSION_VERDICTS } from "@uat/shared";
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
+  check,
   index,
   integer,
   pgEnum,
@@ -36,15 +38,7 @@ export const submissionLanguage = pgEnum("submission_language", LANGUAGES);
  * `pending` while Judge0 works. `judge_error` means no verdict was reached
  * (Judge0 down, or the API restarted mid-judging) and costs nothing.
  */
-export const submissionVerdict = pgEnum("submission_verdict", [
-  "pending",
-  "accepted",
-  "compile_error",
-  "wrong_answer",
-  "runtime_error",
-  "time_limit",
-  "judge_error",
-]);
+export const submissionVerdict = pgEnum("submission_verdict", SUBMISSION_VERDICTS);
 
 // Fresh column builders per table: Drizzle builders must not be shared.
 const levelColumns = () => ({
@@ -104,6 +98,15 @@ export const submissions = pgTable(
     verdict: submissionVerdict("verdict").default("pending").notNull(),
     createdAt: createdAtColumn(),
     judgedAt: timestamp("judged_at", { withTimezone: true }),
+    // For the admin submissions page only; never sent to the player. All
+    // null until the program has run (pending, compile and judge errors),
+    // and on submissions from before they were recorded.
+    /** The slowest test's wall time, in milliseconds, over the tests that ran. */
+    timeMs: integer("time_ms"),
+    /** Judge0's peak memory for the whole run, in KB: the most any test used. */
+    memoryKb: integer("memory_kb"),
+    /** The first hidden test that failed, counting from 1; null when accepted. */
+    failedTest: integer("failed_test"),
   },
   (table) => [
     index("submissions_player_level_idx").on(table.userId, table.levelId, table.levelVersion),
@@ -114,6 +117,34 @@ export const submissions = pgTable(
       .where(sql`${table.verdict} = 'pending'`),
   ],
 );
+
+/**
+ * Every Run that reached the judge, for the admin metrics page. Only the
+ * outcome: the code is not kept, since a Run changes nothing in the game.
+ */
+export const runs = pgTable("runs", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  userId: playerColumn(),
+  ...levelColumns(),
+  language: submissionLanguage("language").notNull(),
+  /** False for a compile error, when no test ran. */
+  compiled: boolean("compiled").notNull(),
+  /** Observations it was run against, and how many it got right. */
+  tests: integer("tests").notNull(),
+  passed: integer("passed").notNull(),
+  createdAt: createdAtColumn(),
+});
+
+/**
+ * A query the level's validator turned away, for the admin metrics page.
+ * Free to the player and not in their log; the input is not kept.
+ */
+export const rejectedQueries = pgTable("rejected_queries", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  userId: playerColumn(),
+  ...levelColumns(),
+  createdAt: createdAtColumn(),
+});
 
 /** The machine's answers, shared by every player: the query cache. */
 export const machineAnswers = pgTable(
@@ -126,4 +157,123 @@ export const machineAnswers = pgTable(
     createdAt: createdAtColumn(),
   },
   (table) => [primaryKey({ columns: [table.levelId, table.levelVersion, table.inputHash] })],
+);
+
+/**
+ * Seconds a player has spent with a level open, for the stats page. The one
+ * stored number in the game: time cannot be counted from other rows, only
+ * measured. While a level is open in a visible tab, the browser sends a
+ * heartbeat every 30 seconds and each one adds 30 here (see `heartbeat` in
+ * game.ts, which ignores beats that come too fast and beats after the level
+ * is solved, so time freezes on solving, like penalty).
+ */
+export const playTime = pgTable(
+  "play_time",
+  {
+    userId: playerColumn(),
+    ...levelColumns(),
+    seconds: integer("seconds").default(0).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.levelId, table.levelVersion] })],
+);
+
+/**
+ * Admins: the game's author and testers. They are left out of every global
+ * figure on the stats page (means, first solves), though their own stats page
+ * still shows their numbers, and they can read every player's feedback. A
+ * browser's player is added by opening the game with `?admin=<ADMIN_TOKEN>`
+ * (see admin.ts). Named for its first job, from before there were admins.
+ */
+export const excludedPlayers = pgTable("excluded_players", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  createdAt: createdAtColumn(),
+});
+
+/**
+ * What a player thinks of a level: how hard it was to work out what the
+ * machine does, how hard to implement, and an overall rating, each 1 to 8,
+ * plus an optional comment. One row per player per level version; sending
+ * again replaces it. `solved` records whether they had solved the level when
+ * they last sent it, since the same rating means something different from a
+ * player who gave up. Not progress: wiping progress keeps it.
+ */
+export const feedback = pgTable(
+  "feedback",
+  {
+    userId: playerColumn(),
+    ...levelColumns(),
+    // Each rating is optional: null means the player left it out.
+    understanding: integer("understanding"),
+    implementation: integer("implementation"),
+    overall: integer("overall"),
+    comment: text("comment").default("").notNull(),
+    solved: boolean("solved").notNull(),
+    createdAt: createdAtColumn(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.levelId, table.levelVersion] }),
+    // The schema checks these too; this keeps the table right whatever writes to it.
+    // `between` on a null is null, which a check treats as passing, so a
+    // left-out rating is allowed and a given one must be 1 to 8.
+    check(
+      "feedback_ratings_range",
+      sql`${table.understanding} between 1 and 8 and ${table.implementation} between 1 and 8 and ${table.overall} between 1 and 8`,
+    ),
+    // Everything is optional, but a row must say something.
+    check(
+      "feedback_not_empty",
+      sql`${table.overall} is not null or ${table.understanding} is not null or ${table.implementation} is not null or ${table.comment} <> ''`,
+    ),
+  ],
+);
+
+/**
+ * What a player thinks of the game as a whole, from the settings menu's
+ * Feedback page: an overall rating 1 to 8 and a comment, either optional.
+ * Unlike level feedback, every send is a new row, never a replacement, so a
+ * player can write as often as they like (up to `MAX_GAME_FEEDBACK` in
+ * game.ts). Not progress: wiping progress keeps it.
+ */
+export const gameFeedback = pgTable(
+  "game_feedback",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    userId: playerColumn(),
+    overall: integer("overall"),
+    comment: text("comment").default("").notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (table) => [
+    index("game_feedback_player_idx").on(table.userId),
+    check("game_feedback_overall_range", sql`${table.overall} between 1 and 8`),
+    check("game_feedback_not_empty", sql`${table.overall} is not null or ${table.comment} <> ''`),
+  ],
+);
+
+/**
+ * A player's save key and alias (see `profiles.ts`). The key is created the
+ * first time the player asks for it, and entering it in another browser signs
+ * that browser in as this player. It is stored as is, not hashed, so the
+ * player can see it again whenever they like: it guards only game progress.
+ *
+ * The alias is the player's name on the scoreboard, unique regardless of
+ * case: the unique index on lower(alias) makes the database the referee when
+ * two players ask for the same name at once. Null means anonymous.
+ */
+export const playerProfiles = pgTable(
+  "player_profiles",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    saveKey: text("save_key").notNull().unique(),
+    alias: text("alias"),
+    createdAt: createdAtColumn(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("player_profiles_alias_idx").on(sql`lower(${table.alias})`)],
 );

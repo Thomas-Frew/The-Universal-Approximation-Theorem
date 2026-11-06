@@ -4,6 +4,7 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { Hono } from "hono";
+import { createAdmin } from "./admin.ts";
 import { createApp } from "./app.ts";
 import { createAuth } from "./auth.ts";
 import { checkConnection, connect } from "./db/index.ts";
@@ -11,9 +12,31 @@ import { readConfig } from "./config.ts";
 import { loadLevels, readManifest } from "./levels.ts";
 import { createGame } from "./game.ts";
 import { createJudge } from "./judge.ts";
+import { createMetrics } from "./metrics.ts";
+import { createProfiles } from "./profiles.ts";
+import { reportError, startReporting } from "./report.ts";
+import { createStats } from "./stats.ts";
 
-const { levelsDir, cacheDir, databaseUrl, authSecret, authUrl, demo, debug, judge0Url, webDir } =
-  readConfig();
+const {
+  levelsDir,
+  cacheDir,
+  databaseUrl,
+  authSecret,
+  authUrl,
+  demo,
+  debug,
+  judge0Url,
+  webDir,
+  adminToken,
+  sentryDsn,
+} = readConfig();
+
+// First, so a failure anywhere below is reported too. Demo and live are told
+// apart in Sentry; anything else (a DSN set locally to try it) is development.
+startReporting(
+  sentryDsn,
+  process.env.NODE_ENV === "production" ? (demo ? "demo" : "live") : "development",
+);
 
 // Checked before anything else: progress lives in Postgres, so without it
 // the API should not start.
@@ -38,7 +61,10 @@ const slugs = demo && manifest.demo ? [manifest.demo] : manifest.levels;
 const loaded = await loadLevels(levelsDir, cacheDir, slugs);
 const port = Number(process.env.PORT ?? 8787);
 
-const auth = createAuth(db, { secret: authSecret, baseURL: authUrl });
+// Save keys and aliases. A new alias changes the scoreboard, which `stats`
+// caches, so it is told (by the time anyone sets an alias, `stats` exists).
+const profiles = createProfiles({ db, onAliasChange: () => stats.forget() });
+const auth = createAuth(db, { secret: authSecret, baseURL: authUrl }, profiles.findPlayerByKey);
 const game = createGame({
   db,
   levels: loaded,
@@ -50,6 +76,8 @@ const game = createGame({
 const released = await game.releaseStuckSubmissions();
 if (released > 0) console.log(`Released ${released} submission(s) left pending by the last run`);
 
+const stats = createStats({ db, levels: loaded, aliasesOf: profiles.aliasesOf });
+
 const app = createApp({
   auth: {
     handler: (request) => auth.handler(request),
@@ -58,6 +86,13 @@ const app = createApp({
   levels: loaded.map(({ level }) => level),
   demo,
   game,
+  stats,
+  admin: {
+    ...createAdmin({ db, levels: loaded, token: adminToken, onNewAdmin: stats.forget, aliasesOf: profiles.aliasesOf }),
+    ...createMetrics({ db, levels: loaded }),
+  },
+  profiles,
+  reportError,
 });
 
 // The server: the API's routes, a health check for Dokploy, and in production

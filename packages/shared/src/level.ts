@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { difficultySchema } from "./config.ts";
 
 /** Folder name of a level, under `levels/` in the levels repo, e.g. `duplicator`. */
 export const levelSlugSchema = z
@@ -33,12 +34,19 @@ export const problemConfigSchema = z.object({
   version: z.number().int().positive(),
   /** The idea behind the machine. Names the answer, so it is secret. */
   concepts: z.array(z.string().min(1)).min(1),
-  /** 1 to 10: how hard the logic is to spot from the samples. */
-  concept_diff: z.number().int().min(1).max(10),
-  /** 1 to 10: how hard the solution is to code once the logic is known. */
-  implement_diff: z.number().int().min(1).max(10),
+  /** 1 to DIFFICULTY_SCALE (8): how hard the logic is to spot from the samples. */
+  concept_diff: difficultySchema,
+  /** 1 to DIFFICULTY_SCALE (8): how hard the solution is to code once the logic is known. */
+  implement_diff: difficultySchema,
   /** One plain-text sentence saying what the machine does. Secret, like `concepts`. */
   solution: z.string().min(1),
+  /**
+   * One sentence on how the level's name relates to the machine, e.g. "A
+   * fulcrum is the pivot a lever turns on: the point in the middle." Shown
+   * beside `solution` once the level is solved, and secret until then, since
+   * it can hint at the answer.
+   */
+  name_note: z.string().min(1),
   limits: z
     .object({
       /** Seconds. */
@@ -78,6 +86,6 @@ export const levelSchema = z.object({
 export type Level = z.infer<typeof levelSchema>;
 
 /** Languages a player can submit in, as a tuple so the database enum can reuse it. */
-export const LANGUAGES = ["python", "cpp", "go"] as const;
+export const LANGUAGES = ["python", "cpp", "go", "java"] as const;
 export const languageSchema = z.enum(LANGUAGES);
 export type Language = z.infer<typeof languageSchema>;

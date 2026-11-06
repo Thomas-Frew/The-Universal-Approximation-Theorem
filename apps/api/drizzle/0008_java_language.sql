@@ -1,0 +1,1 @@
+ALTER TYPE "public"."submission_language" ADD VALUE 'java';

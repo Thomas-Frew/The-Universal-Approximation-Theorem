@@ -36,6 +36,10 @@ COPY packages/shared/package.json packages/shared/
 RUN pnpm install --frozen-lockfile
 
 COPY . .
+# The web app's Sentry DSN (the uat-web project), built into the page by
+# Vite. Set in Dokploy under Environment > Build-time Arguments. Not a secret:
+# it only lets a browser send error reports. Without it, nothing is reported.
+ARG VITE_SENTRY_DSN
 RUN pnpm --filter @uat/web build
 
 COPY --from=levels /levels.yaml /levels/levels.yaml

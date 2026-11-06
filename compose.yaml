@@ -12,7 +12,9 @@ services:
       POSTGRES_PASSWORD: uat
       POSTGRES_DB: uat
     ports:
-      - "127.0.0.1:5432:5432"
+      # Host port 5433, not Postgres's usual 5432, so this can run beside
+      # other projects' databases. Inside the container it is still 5432.
+      - "127.0.0.1:5433:5432"
     volumes:
       # A named volume keeps the data when the container is removed.
       - db-data:/var/lib/postgresql/data

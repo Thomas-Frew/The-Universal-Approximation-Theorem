@@ -2,5 +2,10 @@
   "penalty": {
     "query": 1,
     "wrongSubmission": 5
+  },
+  "levels": {
+    "unlockAll": true,
+    "difficultyScale": 8,
+    "extendedDifficulty": 7
   }
 }

@@ -37,8 +37,17 @@ export function readConfig() {
     throw new Error("Set BETTER_AUTH_URL to the address the browser uses (see .env.example).");
   }
 
+  // Opening the game with ?admin=<this> makes that browser's player an admin:
+  // left out of global stats, and able to read every player's feedback.
+  // Optional; at least 16 characters so it cannot be guessed.
+  const adminToken = process.env.ADMIN_TOKEN || null;
+  if (adminToken && adminToken.length < 16) {
+    throw new Error("ADMIN_TOKEN must be at least 16 characters, e.g. `openssl rand -hex 16`.");
+  }
+
   return {
     ...readLevelsConfig(),
+    adminToken,
     databaseUrl,
     authSecret,
     authUrl,
@@ -46,6 +55,8 @@ export function readConfig() {
     webDir: process.env.WEB_DIR ? resolve(process.env.WEB_DIR) : null,
     /** Where Judge0 is. Without it the API runs, but cannot judge submissions. */
     judge0Url: process.env.JUDGE0_URL?.replace(/\/+$/, "") || null,
+    /** Where to send unexpected errors (see `report.ts`). Without it they are only logged. */
+    sentryDsn: process.env.SENTRY_DSN || null,
     /**
      * DEMO_MODE=true: the public demo. Only the level `levels.yaml` names as `demo`
      * is served, and once it is solved the web app shows a "coming soon" message

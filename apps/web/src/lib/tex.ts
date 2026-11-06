@@ -1,10 +1,11 @@
 /**
  * Parser for the small LaTeX subset level statements use: paragraphs separated
- * by blank lines, `$...$` maths, and `\texttt`, `\emph`, `\textbf`. Anything
+ * by blank lines, `$...$` maths, and `\texttt`, `\emph`, `\textbf`, plus our
+ * own `\guide{...}`, a link to the guide's pattern for reading a list. Anything
  * else is kept as plain text, so a mistake in a statement shows up on the page.
  */
 
-const COMMANDS = ["texttt", "emph", "textbf"] as const;
+const COMMANDS = ["texttt", "emph", "textbf", "guide"] as const;
 export type TexCommand = (typeof COMMANDS)[number];
 
 export type TexNode =

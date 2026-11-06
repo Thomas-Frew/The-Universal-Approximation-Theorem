@@ -42,12 +42,28 @@ export const MAX_RUN_OUTPUT_LENGTH = 2_000;
 export const runRequestSchema = submissionRequestSchema;
 export type RunRequest = z.infer<typeof runRequestSchema>;
 
+/**
+ * Where and why a program crashed on a Run, read from what it wrote to
+ * standard error. Only ever from a Run (whose sandbox holds nothing but the
+ * player's own observations), never from a submission: an error message is
+ * program output, and on hidden tests it could carry them out.
+ */
+export const runtimeErrorSchema = z.object({
+  /** The line in the player's file, or null when the error does not say (a C++ crash). */
+  line: z.number().int().positive().nullable(),
+  /** The error itself, e.g. "ZeroDivisionError: division by zero". */
+  message: z.string(),
+});
+export type RuntimeError = z.infer<typeof runtimeErrorSchema>;
+
 export const runOutcomeSchema = z.object({
   input: z.string(),
   expected: z.string(),
   verdict: z.enum(["passed", "wrong_answer", "runtime_error", "time_limit"]),
   /** What the program printed, cut to `MAX_RUN_OUTPUT_LENGTH`. */
   actual: z.string(),
+  /** For a runtime error, where and why; otherwise null. */
+  error: runtimeErrorSchema.nullable(),
 });
 export type RunOutcome = z.infer<typeof runOutcomeSchema>;
 

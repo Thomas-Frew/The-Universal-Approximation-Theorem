@@ -1,0 +1,210 @@
+import { useState } from "react";
+import { Tex } from "./Tex";
+
+type LevelCompleteProps = {
+  /** The public demo: says the full game is coming, and offers to start again. */
+  demo: boolean;
+  /** What the machine does, in words; the API sends it once the level is solved. */
+  solution: string | undefined;
+  /** How the level's name fits the machine; sent with the solution. */
+  nameNote: string | undefined;
+  /** Opens the next machine in play order, if there is one (never in the demo). */
+  onNext: (() => void) | undefined;
+  /** Shows the player's own accepted code in place of this panel. */
+  onReadCode: () => void;
+  /** Back to the editor, to query and submit again (the penalty stays frozen). */
+  onTryAgain: () => void;
+  /** Opens the feedback card under the observations. */
+  onFeedback: () => void;
+  /**
+   * Solved just now, on this screen: draw the panel in (see "Solving a level"
+   * in index.css). Otherwise it simply appears, e.g. when reopening the demo.
+   */
+  celebrate: boolean;
+  /** Demo only: clears the player's progress and returns them to the start of the level. */
+  onStartAgain: () => Promise<void>;
+};
+
+const buttonBase =
+  "cursor-pointer rounded-md border px-6 py-3 text-xs tracking-label uppercase outline-offset-4 outline-walnut transition-colors focus-visible:outline-2 disabled:cursor-default disabled:opacity-60";
+
+/**
+ * Takes the editor's place once a level is solved: the solution in words, and
+ * a way to read back the code that solved it. The left panel stays, so the
+ * player can still look back over their observations.
+ */
+export function LevelComplete({
+  demo,
+  solution,
+  nameNote,
+  onNext,
+  celebrate,
+  onReadCode,
+  onTryAgain,
+  onFeedback,
+  onStartAgain,
+}: LevelCompleteProps) {
+  // Starting again erases the player's log and submissions, so it takes two
+  // clicks: the first asks, the second does it.
+  const [step, setStep] = useState<"idle" | "confirm" | "working">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  const startAgain = async () => {
+    setStep("working");
+    setError(null);
+    try {
+      await onStartAgain();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "That did not work.");
+      setStep("confirm");
+    }
+  };
+
+  // Each piece takes its animation class only when celebrating. `--delay`
+  // staggers them: seal, ornament, then the words.
+  const play = (className: string) => (celebrate ? className : "");
+
+  return (
+    // Content only: it fills the same frame the editor was in (see LevelScreen).
+    <div className="flex flex-1 flex-col items-center justify-center p-4 text-center">
+      {/* A brass seal: a ring drawn round, then a tick. */}
+      <svg viewBox="0 0 80 80" className="size-20 text-brass" aria-hidden="true">
+        <circle
+          cx="40"
+          cy="40"
+          r="36"
+          pathLength={1}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          className={play("draw-stroke [--delay:100ms] [--duration:900ms]")}
+        />
+        <circle
+          cx="40"
+          cy="40"
+          r="31"
+          pathLength={1}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="0.75"
+          className={play("draw-stroke [--delay:350ms] [--duration:900ms]")}
+        />
+        <path
+          d="M27 41l9 9 17-19"
+          pathLength={1}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={play("draw-stroke [--delay:1000ms] [--duration:450ms]")}
+        />
+      </svg>
+
+      {/* The same brass ornament as the title screen. */}
+      <div className="mt-8 flex items-center gap-4" aria-hidden="true">
+        <span className={`h-px w-16 origin-right bg-brass ${play("draw-rule [--delay:1300ms]")}`} />
+        <span className={`text-xl text-brass italic ${play("draw-fade [--delay:1500ms]")}`}>fin</span>
+        <span className={`h-px w-16 origin-left bg-brass ${play("draw-rule [--delay:1300ms]")}`} />
+      </div>
+
+      <h2 className={`mt-8 text-4xl font-bold ${play("draw-rise [--delay:1700ms]")}`}>
+        {demo ? "The full game is coming soon." : "Solved."}
+      </h2>
+      {/* One column for the sentences and the buttons, as wide as the button
+          row (at least max-w-xl), so the text starts where the first button
+          does. `w-0 min-w-full` lets the text fill that width without
+          widening it. The same space (mt-8) above the sentences and above the
+          buttons, so they sit evenly between the heading and the buttons. */}
+      <div className="flex w-fit min-w-[min(36rem,100%)] max-w-full flex-col items-stretch">
+        {/* The two sentences read as a short paragraph, so they are left-aligned
+            and set alike. Both may use the statements' LaTeX, e.g. $n^{\text{th}}$. */}
+        {solution && (
+          <p className={`mt-8 w-0 min-w-full text-left text-lg text-taupe italic ${play("draw-rise [--delay:1900ms]")}`}>
+            Solution: <Tex source={solution} inline />
+          </p>
+        )}
+        {nameNote && (
+          <p className={`mt-3 w-0 min-w-full text-left text-lg text-taupe italic ${play("draw-rise [--delay:2100ms]")}`}>
+            Context: <Tex source={nameNote} inline />
+          </p>
+        )}
+
+        <div className={`mt-8 flex flex-col items-start gap-3 ${play("draw-rise [--delay:2300ms]")}`}>
+          {step === "idle" ? (
+            <div className="flex flex-wrap gap-3">
+              {/* The way on is the main action; reading the code back comes second. */}
+              {onNext && (
+                <button
+                  type="button"
+                  onClick={onNext}
+                  className={`${buttonBase} border-walnut bg-walnut text-paper hover:bg-ink`}
+                >
+                  Next machine
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onReadCode}
+                className={`${buttonBase} ${onNext ? "border-stone bg-paper hover:bg-linen" : "border-walnut bg-walnut text-paper hover:bg-ink"}`}
+              >
+                Read your code
+              </button>
+              <button
+                type="button"
+                onClick={onTryAgain}
+                className={`${buttonBase} border-stone bg-paper hover:bg-linen`}
+              >
+                Try again
+              </button>
+              {/* Asked for once solved, when the player has seen the whole machine. */}
+              <button
+                type="button"
+                onClick={onFeedback}
+                className={`${buttonBase} border-stone bg-paper hover:bg-linen`}
+              >
+                Feedback
+              </button>
+              {demo && (
+                <button
+                  type="button"
+                  onClick={() => setStep("confirm")}
+                  className={`${buttonBase} border-stone bg-paper hover:bg-linen`}
+                >
+                  Start again
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-taupe">This clears your observations and submissions.</p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setStep("idle")}
+                  disabled={step === "working"}
+                  className={`${buttonBase} border-stone bg-paper hover:bg-linen`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void startAgain()}
+                  disabled={step === "working"}
+                  className={`${buttonBase} border-walnut bg-walnut text-paper hover:bg-ink`}
+                >
+                  {step === "working" ? "Clearing" : "Clear and start again"}
+                </button>
+              </div>
+            </>
+          )}
+          {error && (
+            <p role="alert" className="text-sm text-oxblood">
+              {error}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

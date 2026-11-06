@@ -23,6 +23,10 @@ export type LoadedLevel = {
   secrets: Case[];
   /** What the machine does, in one sentence. Sent only to a player who has solved the level. */
   solution: string;
+  /** How the name fits the machine, in one sentence. Sent with `solution`, only once solved. */
+  nameNote: string;
+  /** 1 to DIFFICULTY_SCALE, the larger of `concept_diff` and `implement_diff`; shown on the level select. */
+  difficulty: number;
   validator: Program;
   machine: Program;
 };
@@ -105,6 +109,8 @@ async function loadLevel(
     memoryLimitKb: config.limits.memory * 1024,
     secrets: await loadCases(join(dir, "data", "secret")),
     solution: config.solution,
+    nameNote: config.name_note,
+    difficulty: Math.max(config.concept_diff, config.implement_diff),
     validator: await prepare(join(dir, "input_validators", "validate.cpp"), cacheDir, [
       join(levelsDir, "include", "testlib.h"),
     ]),

@@ -26,10 +26,15 @@ export function AboutScreen({ ref, onBack, onStart, demo }: AboutScreenProps) {
       <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto overscroll-contain">
         <div className="my-auto max-w-[80vw]">
           <h2 className="text-center text-[clamp(1.5rem,2.1vw,2.75rem)] text-brass italic">
-            What is the universal approximation theorem?
+            What is the Universal Approximation Theorem?
           </h2>
 
-          <div className="mx-auto mt-14 max-w-[58ch] space-y-7 text-[clamp(1.0625rem,1.3vw,1.625rem)] leading-relaxed text-pretty">
+          {/* Justified, with hyphenation (`lang="en"` on the page tells the
+              browser which language's rules) so the even edge never opens
+              wide gaps between words; `text-pretty` keeps a lone word off
+              the last line. 68ch suits Source Serif 4, whose figures (and so
+              `ch`) are narrower than the old Fraunces'. */}
+          <div className="mx-auto mt-14 max-w-[68ch] space-y-7 text-[clamp(1.0625rem,1.3vw,1.625rem)] leading-relaxed text-justify hyphens-auto text-pretty">
             <p>
               The universal approximation theorem states that a neural network
               with a single hidden layer can approximate any continuous function

@@ -104,4 +104,25 @@ for (const loaded of levels) {
   for (const problem of problems) console.log(`     - ${problem}`);
   failed ||= problems.length > 0;
 }
+
+// The play order must never get easier: each level's difficulty (the larger
+// of concept_diff and implement_diff, as the level select shows it) is at
+// least the one before it. Levels of equal difficulty keep the order given.
+// The demo is not part of the order, so it is left out unless it is in it.
+const bySlug = new Map(levels.map((loaded) => [loaded.level.slug, loaded]));
+const order = manifest.levels.map((slug) => bySlug.get(slug)!);
+const outOfOrder = order.filter((loaded, index) => index > 0 && loaded.difficulty < order[index - 1]!.difficulty);
+if (outOfOrder.length > 0) {
+  console.log("FAIL levels.yaml: `levels:` must be sorted by difficulty, easiest first");
+  for (const loaded of outOfOrder) {
+    const index = order.indexOf(loaded);
+    const before = order[index - 1]!;
+    console.log(
+      `     - ${loaded.level.slug} (difficulty ${loaded.difficulty}) comes after ${before.level.slug} (difficulty ${before.difficulty})`,
+    );
+  }
+  failed = true;
+} else {
+  console.log("ok   levels.yaml order (by difficulty)");
+}
 process.exitCode = failed ? 1 : 0;

@@ -1,5 +1,7 @@
-@import "@fontsource-variable/fraunces/full.css";
-@import "@fontsource-variable/fraunces/full-italic.css";
+/* The opsz files carry the optical-size axis as well as weight: the font
+   redraws itself slightly per size, sturdier when small, finer when large. */
+@import "@fontsource-variable/source-serif-4/opsz.css";
+@import "@fontsource-variable/source-serif-4/opsz-italic.css";
 @import "@fontsource/ibm-plex-mono/400.css";
 @import "@fontsource/ibm-plex-mono/500.css";
 @import "@fontsource/ibm-plex-mono/600.css";
@@ -22,16 +24,24 @@
   --color-walnut: #7a4e2d;
   --color-sage: #8e9a68;
   --color-brass: #b4924f;
+  /* Brass deepened enough to read as text on Vellum (about 4.6:1), for the
+     few words that should look gilded: a full solver's name. */
+  --color-gilt: #7d5f25;
   --color-oxblood: #8a3a2e;
 
-  /* Display and UI */
-  --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
-  --font-display--font-variation-settings: "WONK" 0;
+  /* What a floating panel's shadow is made of. Ink, on Paper; Coffee needs
+     its own, since its Ink is cream and would make a glow. */
+  --color-shadow: #2a211b;
 
-  /* Fraunces thins its strokes at large sizes. `font-title` pins the optical
-     size low so the big title keeps the sturdy letterforms of the design. */
+  /* Display and UI */
+  --font-display: "Source Serif 4 Variable", Georgia, "Times New Roman", serif;
+
+  /* At large sizes Source Serif picks its Display cut on its own, with
+     hairline serifs that look faint on the title's photo backdrop.
+     `font-title` pins the optical size lower, so the big title keeps sturdy
+     strokes. */
   --font-title: var(--font-display);
-  --font-title--font-variation-settings: "opsz" 30, "WONK" 0;
+  --font-title--font-variation-settings: "opsz" 24;
 
   /* Inputs, outputs, code, numbers */
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
@@ -60,9 +70,36 @@
 
   /* What plain, unclassed text gets. */
   --default-font-family: var(--font-display);
-  --default-font-variation-settings: "WONK" 0;
   --default-mono-font-family: var(--font-mono);
   --default-mono-font-feature-settings: "tnum";
+}
+
+/* The Coffee theme: the same tokens, given dark values (`lib/theme.ts` sets
+   `data-theme` on the root). Every class reads these variables, so nothing in
+   the components changes. Each token keeps its role: Paper is still the page
+   and the darkest, Ink still the text and the lightest, and the accents are
+   lighter than on Paper, so the text on a filled button (`text-paper`, now
+   dark) still reads against it.
+   The browns are the owl's, from the logo: Vellum is the owl exactly and Ink
+   the logo's cream, so the dark logo (the light one inverted) sits on Vellum
+   as the light one sits on Paper's Vellum. The other browns keep their
+   lightness and take the owl's hue and chroma (OKLCH 53.8°, about 0.015). */
+@layer base {
+  :root[data-theme="coffee"] {
+    color-scheme: dark;
+    --color-paper: #1c1613;
+    --color-vellum: #29211c;
+    --color-linen: #382d27;
+    --color-stone: #56473e;
+    --color-taupe: #ab9a90;
+    --color-ink: #efe6d8;
+    --color-walnut: #c8935f;
+    --color-sage: #a4b27c;
+    --color-brass: #c9a35f;
+    --color-gilt: #dcb76c;
+    --color-oxblood: #d77a66;
+    --color-shadow: #000000;
+  }
 }
 
 @layer base {
@@ -79,12 +116,14 @@
     @apply bg-paper text-ink antialiased;
   }
 
-  /* The backdrop: photo underneath, with a 95% Paper wash on top so it only
-     just shows. It is its own fixed layer rather than a
+  /* The backdrop: photo underneath, with a wash on top so it shows only
+     faintly. It is its own fixed layer rather than a
      `background-attachment: fixed` on body, because that forces the browser to
      repaint the photo on every frame of a scroll; a fixed layer is painted
      once and left alone. */
   body::before {
+    /* Paper itself, 90% strong: the page keeps Paper's cream, and the photo
+       shows through faintly. (Mixing in white made the page read stark.) */
     --paper-wash: color-mix(in srgb, var(--color-paper) 90%, transparent);
     content: "";
     position: fixed;
@@ -117,14 +156,112 @@
   animation: screen-leave-up var(--screen-transition) var(--ease-screen) both;
 }
 
-::view-transition-new(level) {
+/* Only straight from the intro (the demo, which has no level select). */
+:root[data-from="intro"]::view-transition-new(level) {
   animation: screen-enter-up var(--screen-transition) var(--ease-screen) both;
 }
 
-/* Back to the intro is a plain cross-fade, a little slower than the default. */
+/* The level select sits between the intro and the levels, so it arrives and
+   leaves either way. App.tsx sets data-from and data-to on the root before
+   each transition. Intro to select carries on the intro's upward scroll. */
+:root[data-from="intro"]::view-transition-new(select),
+:root[data-from="intro"]::view-transition-new(welcome) {
+  animation: screen-enter-up var(--screen-transition) var(--ease-screen) both;
+}
+
+/* Everything else (back to the intro, a level or the stats page to the
+   select, the select to either, and the feedback, changelog, credits, save, admin, metrics and submissions pages to and
+   from the select or a level) is a plain cross-fade, a little slower than the default. */
 ::view-transition-old(level),
-::view-transition-new(intro) {
+::view-transition-new(intro),
+::view-transition-old(stats),
+::view-transition-new(stats),
+::view-transition-old(feedback),
+::view-transition-new(feedback),
+:root[data-from="feedback"]::view-transition-new(select),
+:root[data-from="feedback"]::view-transition-new(level),
+:root[data-to="feedback"]::view-transition-old(select),
+::view-transition-old(changelog),
+::view-transition-new(changelog),
+:root[data-from="changelog"]::view-transition-new(select),
+:root[data-from="changelog"]::view-transition-new(level),
+:root[data-to="changelog"]::view-transition-old(select),
+::view-transition-old(credits),
+::view-transition-new(credits),
+:root[data-from="credits"]::view-transition-new(select),
+:root[data-from="credits"]::view-transition-new(level),
+:root[data-to="credits"]::view-transition-old(select),
+::view-transition-old(save),
+::view-transition-new(save),
+:root[data-from="save"]::view-transition-new(select),
+:root[data-from="save"]::view-transition-new(level),
+:root[data-to="save"]::view-transition-old(select),
+::view-transition-old(guide),
+::view-transition-new(guide),
+:root[data-from="guide"]::view-transition-new(select),
+:root[data-from="guide"]::view-transition-new(level),
+:root[data-to="guide"]::view-transition-old(select),
+::view-transition-old(admin),
+::view-transition-new(admin),
+:root[data-from="admin"]::view-transition-new(select),
+:root[data-from="admin"]::view-transition-new(level),
+:root[data-to="admin"]::view-transition-old(select),
+::view-transition-old(metrics),
+::view-transition-new(metrics),
+:root[data-from="metrics"]::view-transition-new(select),
+:root[data-from="metrics"]::view-transition-new(level),
+:root[data-to="metrics"]::view-transition-old(select),
+::view-transition-old(submissions),
+::view-transition-new(submissions),
+:root[data-from="submissions"]::view-transition-new(select),
+:root[data-from="submissions"]::view-transition-new(level),
+:root[data-to="submissions"]::view-transition-old(select),
+:root[data-to="intro"]::view-transition-old(select),
+:root[data-to="intro"]::view-transition-old(welcome),
+:root[data-from="welcome"]::view-transition-new(select),
+:root[data-to="welcome"]::view-transition-old(select),
+:root[data-from="welcome"]::view-transition-old(welcome),
+:root[data-from="level"]::view-transition-new(select),
+:root[data-from="stats"]::view-transition-new(select),
+:root[data-to="level"]::view-transition-old(select),
+:root[data-to="stats"]::view-transition-old(select),
+:root[data-from="select"]::view-transition-new(level) {
   animation-duration: 500ms;
+}
+
+/* First solves on the stats page: a slow glint of brass across the card,
+   now and then. Off under reduced motion. */
+.shine {
+  position: relative;
+  overflow: hidden;
+}
+.shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    110deg,
+    transparent 40%,
+    color-mix(in oklab, var(--color-brass) 22%, transparent) 50%,
+    transparent 60%
+  );
+  background-size: 250% 100%;
+  animation: shine 5s ease-in-out infinite;
+}
+@keyframes shine {
+  0%,
+  40% {
+    background-position: 150% 0;
+  }
+  100% {
+    background-position: -50% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shine::after {
+    display: none;
+  }
 }
 
 /* CodeMirror (CodeEditor.tsx). These sit outside any @layer on purpose:
@@ -153,6 +290,13 @@
 
 .cm-editor .cm-activeLine {
   background-color: color-mix(in srgb, var(--color-linen) 45%, transparent);
+}
+
+/* The line a runtime error points at (`errorLine` in CodeEditor.tsx). After
+   the active line, so it still shows when the cursor is on it. */
+.cm-editor .cm-errorLine {
+  background-color: color-mix(in srgb, var(--color-oxblood) 16%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-oxblood);
 }
 
 .cm-editor .cm-activeLineGutter {
@@ -188,11 +332,32 @@
   color: color-mix(in srgb, var(--color-sage) 55%, var(--color-ink));
 }
 
-/* Drawing the title. On the title screen the brass rules draw outward, "The"
-   fades in, then each line of the title is traced in outline by a sweeping
-   pen and filled with ink. `--delay` (set per element) staggers the steps.
-   Everything sits inside this media query, so with reduced motion the classes
-   do nothing and the title is simply there. */
+/* Revealing the title. The whole title (rules, "The" and the three words)
+   emerges as one out of a deep blur, growing from slightly too small, slowly
+   enough to feel like a curtain rising: the ease-out spends most of its time
+   on the last, sharpening stretch. The Begin cue fades in once it has landed.
+   With reduced motion the title is simply there. */
+@media (prefers-reduced-motion: no-preference) {
+  .title-reveal {
+    animation: title-reveal 2600ms cubic-bezier(0.16, 1, 0.3, 1) 300ms both;
+  }
+}
+
+@keyframes title-reveal {
+  from {
+    opacity: 0;
+    filter: blur(28px);
+    transform: scale(0.88);
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+/* Small drawn-in pieces: a brass rule drawing outward (`draw-rule`, from its
+   transform-origin) and a fade from a blur (`draw-fade`), used by the title's
+   Begin cue and the completion panel. `--delay` (set per element) staggers
+   them. Skipped under reduced motion, like everything here. */
 @media (prefers-reduced-motion: no-preference) {
   .draw-rule {
     animation: draw-rule 900ms var(--ease-screen) var(--delay, 100ms) both;
@@ -200,19 +365,6 @@
 
   .draw-fade {
     animation: draw-fade 800ms ease-out var(--delay, 0ms) both;
-  }
-
-  .draw-ink {
-    -webkit-text-stroke: 1.5px var(--color-ink);
-    /* A soft-edged mask, wider than the text, slid from right to left: the
-       text appears from left to right behind a feathered edge, like a pen
-       moving across the page. Only the mask's alpha matters, not its colour. */
-    mask-image: linear-gradient(90deg, #000 40%, transparent 60%);
-    mask-size: 250% 100%;
-    mask-repeat: no-repeat;
-    animation:
-      draw-sweep 1300ms cubic-bezier(0.45, 0, 0.25, 1) var(--delay, 0ms) both,
-      draw-fill 800ms ease-in-out calc(var(--delay, 0ms) + 1100ms) both;
   }
 }
 
@@ -226,28 +378,6 @@
   from {
     opacity: 0;
     filter: blur(4px);
-  }
-}
-
-@keyframes draw-sweep {
-  from {
-    mask-position: 100% 0;
-  }
-  to {
-    mask-position: 0 0;
-  }
-}
-
-/* Outline first (no fill, ink stroke), then the ink floods in and the stroke
-   goes, leaving the plain bold letters. */
-@keyframes draw-fill {
-  from {
-    color: transparent;
-    -webkit-text-stroke-color: var(--color-ink);
-  }
-  to {
-    color: var(--color-ink);
-    -webkit-text-stroke-color: transparent;
   }
 }
 
@@ -294,4 +424,11 @@
     opacity: 0;
     transform: scale(0.6);
   }
+}
+
+/* KaTeX sets its maths at 1.21em, which stands out from the Source Serif around
+   it. Text size instead. `:root` outranks KaTeX's own rule, whichever
+   stylesheet loads last. */
+:root .katex {
+  font-size: 1em;
 }

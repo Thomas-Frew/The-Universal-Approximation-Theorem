@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { HeaderTools } from "../components/HeaderTools";
 import { slideScrollTo } from "../lib/motion";
 import { AboutScreen } from "./AboutScreen";
 import { TitleScreen } from "./TitleScreen";
@@ -114,6 +115,13 @@ export function IntroScreen({ onStart, demo }: IntroScreenProps) {
     <main ref={mainRef} className="[view-transition-name:intro]">
       <TitleScreen ref={titleRef} onNext={showAbout} />
       <AboutScreen ref={aboutRef} onBack={showTitle} onStart={onStart} demo={demo} />
+      {/* The tools stay in the corner over both pages, there from the first
+          moment rather than drawn in with the title: the title tune plays
+          before any machine is opened, so the speaker must be at hand.
+          Pressing it first is safe: muting stops the tune before it starts. */}
+      <div className="fixed top-6 right-6 z-10 flex items-center gap-3">
+        <HeaderTools intro />
+      </div>
     </main>
   );
 }

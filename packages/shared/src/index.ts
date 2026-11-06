@@ -1,3 +1,4 @@
+export * from "./config.ts";
 export * from "./level.ts";
 export * from "./penalty.ts";
 export * from "./progress.ts";
@@ -5,3 +6,9 @@ export * from "./query.ts";
 export * from "./text.ts";
 export * from "./submission.ts";
 export * from "./responses.ts";
+export * from "./stats.ts";
+export * from "./feedback.ts";
+export * from "./admin.ts";
+export * from "./profile.ts";
+export * from "./rude.ts";
+export * from "./metrics.ts";

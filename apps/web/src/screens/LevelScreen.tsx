@@ -1,12 +1,19 @@
-import { type Level, penaltyOf, type Progress } from "@uat/shared";
-import { useEffect, useState } from "react";
-import { DemoComplete } from "../components/DemoComplete";
+import { HEARTBEAT_SECONDS, type Level, penaltyOf, type Progress } from "@uat/shared";
+import { useEffect, useRef, useState } from "react";
+import { LevelComplete } from "../components/LevelComplete";
+import { AdminLevelFeedbackCard } from "../components/AdminFeedback";
+import { FeedbackSection, type FeedbackSectionHandle } from "../components/FeedbackSection";
+import { GuideBanner } from "../components/GuideBanner";
 import { HypothesisPanel } from "../components/HypothesisPanel";
+import { HeaderTools, NavButton } from "../components/HeaderTools";
 import { Label } from "../components/Label";
-import { MuteButton } from "../components/MuteButton";
 import { ObservationPanel } from "../components/ObservationPanel";
-import { Tex } from "../components/Tex";
-import { resetProgress } from "../lib/api";
+import { SolvedCode } from "../components/SolvedCode";
+import { StatusBadge } from "../components/StatusBadge";
+import { GuideLinkContext, Tex } from "../components/Tex";
+import { resetProgress, sendHeartbeat } from "../lib/api";
+import { useIsAdmin } from "../lib/admin";
+import { clearDrafts } from "../lib/drafts";
 import { prefersReducedMotion } from "../lib/motion";
 import { toRoman } from "../lib/roman";
 
@@ -16,34 +23,12 @@ type LevelScreenProps = {
   initialProgress: Progress;
   /** The public demo: solving this level ends it, so the editor gives way to a message. */
   demo: boolean;
+  /** Opens the next machine in play order; absent on the last one and in the demo. */
+  onNext: (() => void) | undefined;
   onExit: () => void;
+  /** Opens the guide at its pattern for reading a list: the `\guide{}` links in the Input box. */
+  onGuideLists: () => void;
 };
-
-const BADGES = {
-  in_progress: { text: "In progress", className: "border-stone text-taupe" },
-  solved: { text: "Solved", className: "border-sage bg-sage text-paper" },
-};
-
-/**
- * A small mark beside the title. A level not yet touched has none. `celebrate`
- * plays a short flourish, for the moment the level is solved.
- */
-function StatusBadge({ status, celebrate }: { status: Progress["status"]; celebrate: boolean }) {
-  if (status === "new") return null;
-  const badge = BADGES[status];
-  return (
-    <span
-      // A new key per status remounts the badge, so its flourish plays on change.
-      key={status}
-      // Centring on the heading's line box sits it high, since that box keeps
-      // room below for descenders; top-1 lowers it onto the middle of the
-      // lowercase letters, where the eye reads the title's centre.
-      className={`relative top-1 shrink-0 rounded-full border whitespace-nowrap px-3 py-1 text-xs tracking-label uppercase ${badge.className} ${celebrate ? "badge-pop" : ""}`}
-    >
-      {badge.text}
-    </span>
-  );
-}
 
 function Counter({ label, value }: { label: string; value: number }) {
   return (
@@ -65,10 +50,40 @@ function FormatCard({ title, body }: { title: string; body: string }) {
 }
 
 /** The level page: query the machine, then submit code that reproduces it. */
-export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScreenProps) {
+export function LevelScreen({
+  level,
+  initialProgress,
+  demo,
+  onNext,
+  onExit,
+  onGuideLists,
+}: LevelScreenProps) {
+  const admin = useIsAdmin();
   // The server's word on where the player stands. Every query and submission
   // answers with a fresh copy, which simply replaces this one.
   const [progress, setProgress] = useState(initialProgress);
+  // The feedback card under the observations; the completion panel's Feedback button opens it.
+  const feedbackRef = useRef<FeedbackSectionHandle>(null);
+
+  // Time played, for the stats page: a start beat on opening (and on coming
+  // back to the tab), then a heartbeat every HEARTBEAT_SECONDS while the tab
+  // is visible. Each adds the time since the last, and solving adds the rest,
+  // so even a quick solve is timed. The API stops counting once it is solved.
+  useEffect(() => {
+    const visible = () => document.visibilityState === "visible";
+    if (visible()) void sendHeartbeat(level.number, true);
+    // Leaving the tab counts the stretch since the last beat; coming back
+    // starts the clock again, so the time away is not counted.
+    const onVisibility = () => void sendHeartbeat(level.number, visible());
+    document.addEventListener("visibilitychange", onVisibility);
+    const beat = setInterval(() => {
+      if (visible()) void sendHeartbeat(level.number);
+    }, HEARTBEAT_SECONDS * 1000);
+    return () => {
+      clearInterval(beat);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [level.number]);
   const { queries, wrongSubmissions } = progress;
   const penalty = penaltyOf({ queries, wrongSubmissions });
 
@@ -82,11 +97,15 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
 
   // In the demo, solving swaps the editor for the "coming soon" panel. A beat
   // on "Accepted.", then the editor fades out and the panel draws itself in.
-  const [rightPanel, setRightPanel] = useState<"editor" | "leaving" | "complete">(
-    demo && initialProgress.status === "solved" ? "complete" : "editor",
+  // Solving swaps the editor for the completion panel (the solution, and a
+  // way to read back the code that solved it). A beat on "Accepted.", then the
+  // editor fades out and the panel draws itself in. A level solved before
+  // opens straight on the panel.
+  const [rightPanel, setRightPanel] = useState<"editor" | "leaving" | "complete" | "code">(
+    initialProgress.status === "solved" ? "complete" : "editor",
   );
   useEffect(() => {
-    if (!demo || !justSolved) return;
+    if (!justSolved) return;
     if (prefersReducedMotion()) {
       setRightPanel("complete");
       return;
@@ -97,7 +116,25 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
       clearTimeout(fadeOut);
       clearTimeout(swap);
     };
-  }, [demo, justSolved]);
+  }, [justSolved]);
+
+  // Between the editor, the solution panel and the code view: fade out,
+  // swap while invisible, fade in.
+  const [swapping, setSwapping] = useState(false);
+  const swapPanel = (next: "editor" | "complete" | "code") => {
+    // The panel's entrance plays once, when the level is solved; coming back
+    // to it later simply fades it in.
+    const swap = () => {
+      setJustSolved(false);
+      setRightPanel(next);
+      setSwapping(false);
+    };
+    if (prefersReducedMotion()) return swap();
+    setSwapping(true);
+    setTimeout(swap, 300);
+  };
+  // Bumped by the demo's "Start again", for a fresh editor with the starter code.
+  const [editorKey, setEditorKey] = useState(0);
 
   return (
     <main className="mx-auto min-h-dvh max-w-[min(104rem,94vw)] py-10 [view-transition-name:level]">
@@ -111,28 +148,26 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
           On narrow screens the buttons share the top line with the small
           label, so the title gets the full width. The badge and labels never
           break mid-phrase. */}
+      <GuideBanner />
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-8 border-b border-stone pb-4 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
-        <div className="col-start-1 row-start-1">
+        <div className="col-span-2 row-start-2 lg:col-span-1 lg:row-start-1">
           <Label>Machine {toRoman(level.number)}</Label>
         </div>
-        <div className="col-span-2 row-start-2 flex flex-wrap items-center gap-x-4 gap-y-2 lg:col-span-1">
+        <div className="col-span-2 row-start-3 flex flex-wrap items-center gap-x-4 gap-y-2 lg:col-span-1 lg:row-start-2">
           <h1 className="text-4xl font-bold">{level.title}</h1>
-          <StatusBadge status={progress.status} celebrate={justSolved} />
+          {/* Centring on the heading's line box sits the badge high, since that
+              box keeps room below for descenders; top-1 lowers it onto the
+              middle of the lowercase letters, where the eye reads the centre. */}
+          <StatusBadge status={progress.status} celebrate={justSolved} className="relative top-1" />
         </div>
-        <div className="col-span-2 row-start-3 mt-4 flex gap-6 sm:gap-8 lg:col-span-1 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0">
+        <div className="col-span-2 row-start-4 mt-4 flex gap-6 sm:gap-8 lg:col-span-1 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0">
           <Counter label="Queries" value={queries} />
           <Counter label="Wrong answers" value={wrongSubmissions} />
           <Counter label="Penalty" value={penalty} />
         </div>
-        <div className="col-start-2 row-start-1 mb-2 flex items-center gap-3 lg:col-start-3 lg:row-span-2 lg:mb-0 lg:gap-8">
-          <MuteButton />
-          <button
-            type="button"
-            onClick={onExit}
-            className="cursor-pointer rounded-md border border-stone px-4 py-2 text-xs tracking-label uppercase outline-offset-4 outline-walnut hover:bg-linen focus-visible:outline-2"
-          >
-            Menu
-          </button>
+        <div className="col-span-2 row-start-1 mb-4 flex items-center gap-3 lg:col-span-1 lg:col-start-3 lg:row-span-2 lg:mb-0 lg:ml-8 lg:self-end">
+          <HeaderTools />
+          <NavButton onClick={onExit}>Menu</NavButton>
         </div>
       </header>
 
@@ -140,36 +175,75 @@ export function LevelScreen({ level, initialProgress, demo, onExit }: LevelScree
           content (a long line of code, a wide table) and push off the screen. */}
       <div className="mt-8 grid grid-cols-[minmax(0,1fr)] items-stretch gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="flex flex-col gap-6">
-          <FormatCard title="Input" body={level.inputFormat} />
-          <FormatCard title="Output" body={level.outputFormat} />
+          <GuideLinkContext value={onGuideLists}>
+            <FormatCard title="Input" body={level.inputFormat} />
+            <FormatCard title="Output" body={level.outputFormat} />
+          </GuideLinkContext>
           <ObservationPanel
             level={level}
             log={progress.log}
             onProgress={updateProgress}
           />
+          <FeedbackSection ref={feedbackRef} levelNumber={level.number} />
+          {admin && <AdminLevelFeedbackCard levelNumber={level.number} />}
         </div>
 
-        {/* One frame for the right-hand side. When the demo is solved, the
+        {/* One frame for the right-hand side. When the level is solved, the
             frame stays and only its content changes: the editor fades out,
             then the completion panel draws itself in. */}
         <section className="flex min-h-[40rem] flex-col rounded-md border border-stone bg-vellum p-6">
-          {rightPanel === "complete" ? (
-            <DemoComplete
-              solution={progress.solution}
-              celebrate={justSolved}
-              onStartAgain={async () => {
-                setProgress(await resetProgress(level.number));
-                setJustSolved(false);
-                setRightPanel("editor");
-              }}
-            />
-          ) : (
+          {/* Everything on this side shares one wrapper, which fades out
+              ("leaving", when the level is first solved, or `swapping`),
+              changes what it shows while invisible, and fades back in. */}
+          <div
+            className={`flex flex-1 flex-col transition-opacity ease-out ${
+              rightPanel === "leaving" ? "opacity-0 duration-500" : swapping ? "opacity-0 duration-300" : "duration-300"
+            }`}
+          >
+            {rightPanel === "code" && progress.solvedWith && (
+              <SolvedCode
+                language={progress.solvedWith.language}
+                code={progress.solvedWith.code}
+                onBack={() => swapPanel("complete")}
+                onTryAgain={() => swapPanel("editor")}
+              />
+            )}
+            {(rightPanel === "complete" || (rightPanel === "code" && !progress.solvedWith)) && (
+              <LevelComplete
+                demo={demo}
+                solution={progress.solution}
+                nameNote={progress.nameNote}
+                onNext={onNext}
+                onReadCode={() => swapPanel("code")}
+                onTryAgain={() => swapPanel("editor")}
+                onFeedback={() => feedbackRef.current?.reveal()}
+                celebrate={justSolved}
+                onStartAgain={async () => {
+                  setProgress(await resetProgress(level.number));
+                  setJustSolved(false);
+                  // A fresh editor, with the starter code rather than the saved draft.
+                  clearDrafts(level.id);
+                  setEditorKey((key) => key + 1);
+                  setRightPanel("editor");
+                }}
+              />
+            )}
+            {/* The editor stays mounted while hidden, so going to the solution
+                and back keeps whatever the player had written. */}
             <div
-              className={`flex flex-1 flex-col transition-opacity duration-500 ease-out ${rightPanel === "leaving" ? "opacity-0" : ""}`}
+              className={rightPanel === "editor" || rightPanel === "leaving" ? "flex flex-1 flex-col" : "hidden"}
             >
-              <HypothesisPanel levelNumber={level.number} onProgress={updateProgress} />
+              <HypothesisPanel
+                key={editorKey}
+                levelNumber={level.number}
+                levelId={level.id}
+                onProgress={updateProgress}
+                // On a level solved before, start from the latest solution.
+                initialDraft={editorKey === 0 ? initialProgress.solvedWith : undefined}
+                onShowSolution={progress.status === "solved" ? () => swapPanel("complete") : undefined}
+              />
             </div>
-          )}
+          </div>
         </section>
       </div>
     </main>
